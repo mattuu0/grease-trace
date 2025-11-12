@@ -312,3 +312,37 @@ export const WhiteboardReceiver: React.FC<WhiteboardReceiverProps> = ({
         </div>
     );
 };
+
+/**
+ * 受信データ処理ヘルパー関数
+ */
+
+/**
+ * JSON文字列をパースし、WhiteboardObject[]の型として返す
+ * @param jsonData 受信したホワイトボードオブジェクトのJSON文字列
+ * @returns 描画オブジェクトの配列
+ */
+export const parseWhiteboardData = (jsonData: string): WhiteboardObject[] => {
+    try {
+        const parsedData = JSON.parse(jsonData);
+
+        // JSON.parseの結果が配列であることを確認
+        if (!Array.isArray(parsedData)) {
+            console.error("Parse Error: Received data is not an array.", parsedData);
+            return [];
+        }
+
+        // 型チェック（簡易的なチェック。より厳密なバリデーションが必要な場合はライブラリ推奨）
+        const validObjects = parsedData.filter((obj) => {
+            // 必須プロパティ 'id' と 'type' が存在するかをチェック
+            return obj && typeof obj.id === 'string' && typeof obj.type === 'string' &&
+                Object.values(OBJECT_TYPES).includes(obj.type);
+        }) as WhiteboardObject[]; // フィルタリングされた後のオブジェクトは WhiteboardObject[] と見なす
+
+        return validObjects;
+
+    } catch (e) {
+        console.error("Failed to parse whiteboard JSON data:", e);
+        return [];
+    }
+};

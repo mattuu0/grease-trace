@@ -10,9 +10,12 @@ export default function App(): React.ReactElement {
     // 初期化を検知するフラグ
     const [loading, setLoading] = React.useState(true);
 
+    // peer を保持
+    const [mainPeer, setMainPeer] = React.useState<Peer | null>(null);
+
     // データコネクション
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    let peerConnection: DataConnection | null = null;
+    const [peerConnection, setPeerConnection] = React.useState<DataConnection | null>(null);
 
     // コンポーネントの初期化時にのみサービスを呼び出します
     React.useEffect(() => {
@@ -22,23 +25,32 @@ export default function App(): React.ReactElement {
         }
 
         // 初期化処理を実行します
-        const mainPeer = new Peer("a503a41e-20f4-4a15-9b74-863402129399");
+        const newPeer = new Peer("21061bed-4d7c-4a92-a905-2a1b884480b2");
 
-        mainPeer.on('connection', function (conn) {
+        newPeer.on('connection', function (conn) {
+            console.log("🎉 コネクションが確立されました");
+
             conn.on('open', function () {
                 // here you have conn.id
                 conn.send('hi!');
 
+                console.log("🎉 接続が確立されました");
+
                 // コネクションを保持
                 // eslint-disable-next-line react-hooks/exhaustive-deps
-                peerConnection = conn;
+                setPeerConnection(conn);
             });
 
             conn.on("close", function () {
                 // コネクションを破棄
-                peerConnection = null;
+                // eslint-disable-next-line react-hooks/exhaustive-deps
+                setPeerConnection(null);
             })
         });
+
+        // peer を保持
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        setMainPeer(newPeer);
 
         // 初期化済みのフラグを立てます
         setLoading(false);
@@ -58,6 +70,10 @@ export default function App(): React.ReactElement {
     const updateCallback = (jsonString: string) => {
         console.log("🎉 更新コールバック実行!");
         console.log(jsonString);
+
+        if (peerConnection) {
+            peerConnection.send(jsonString);
+        }
     }
 
     return (

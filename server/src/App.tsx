@@ -6,9 +6,12 @@ import {
     RectangleObject,
     PenObject,
     TextObject,
-    CircleObject // シミュレーションデータに使用するためインポート
+    CircleObject, // シミュレーションデータに使用するためインポート
+    parseWhiteboardData
 } from './whiteboardRecviver'; // WhiteboardReceiverをインポート
-import { Peer } from "peerjs";
+
+// peerjs
+import { DataConnection, Peer } from "peerjs";
 
 /**
  * デモ用メインアプリ (データのシミュレーションとReceiverの配置)
@@ -18,48 +21,51 @@ export default function App(): React.ReactElement {
     const [objects, setObjects] = useState<WhiteboardObject[]>([]);
     const [laserPos, setLaserPos] = useState<Point | null>(null);
 
-    // ⭐️ データ受信シミュレーション (本番環境ではWebSocketなどに置き換える)
-    useEffect(() => {
-        // ダミーの初期オブジェクトを設定
-        const initialObjects: WhiteboardObject[] = [
-            { id: '1', type: 'rectangle', color: '#1e3a8a', lineWidth: 5, x: 0.1, y: 0.1, width: 0.2, height: 0.3 } as RectangleObject,
-            {
-                id: '2', type: 'pen', color: '#b91c1c', lineWidth: 8, points: [
-                    { x: 0.5, y: 0.5 }, { x: 0.55, y: 0.45 }, { x: 0.6, y: 0.5 }, { x: 0.65, y: 0.55 }
-                ]
-            } as PenObject,
-            { id: '3', type: 'text', color: '#000000', lineWidth: 0, x: 0.7, y: 0.2, text: "受信専用デモ", fontSize: 30, width: 0.1, height: 0.05 } as TextObject
-        ];
-        setObjects(initialObjects);
+    // コネクション
+    const [dataConnection, setDataConnection] = useState<DataConnection | null>(null);
 
-        // レーザーポインター移動シミュレーション
-        const moveLaser = (count: number) => {
-            if (count > 200) return;
-            const x = 0.3 + 0.1 * Math.sin(count * 0.1);
-            const y = 0.7 + 0.1 * Math.cos(count * 0.1);
-            setLaserPos({ x, y });
-            // console.log(`Laser: (${x.toFixed(2)}, ${y.toFixed(2)})`);
-            setTimeout(() => moveLaser(count + 1), 50);
-        };
+    // 初期化関数
+    // 初期化を検知するフラグ
+    const [loading, setLoading] = React.useState(true);
 
-        const laserTimer = setTimeout(() => moveLaser(0), 100); // 遅延させて開始
+    // コンポーネントの初期化時にのみサービスを呼び出します
+    React.useEffect(() => {
+        // すでに初期化されていた場合は処理を抜けます
+        if (!loading) {
+            return;
+        }
 
-        // 5秒後にオブジェクト追加をシミュレート
-        const addObjTimer = setTimeout(() => {
-            setObjects(prev => [
-                ...prev,
-                { id: '4', type: 'circle', color: '#059669', lineWidth: 3, x: 0.2, y: 0.75, rx: 0.08, ry: 0.08 } as CircleObject
-            ]);
-            // 8秒後にレーザーを非表示に (最初のsetTimeoutから8秒後)
-            const hideLaserTimer = setTimeout(() => setLaserPos(null), 3000);
-            return () => clearTimeout(hideLaserTimer);
-        }, 5000);
+        console.log("🎉 初期化処理実行!");
 
-        return () => {
-            clearTimeout(laserTimer);
-            clearTimeout(addObjTimer);
-        };
-    }, []);
+        // 初期化処理を実行します
+        const mainPeer = new Peer(crypto.randomUUID());
+
+        // コネクションを開始します
+        const DataConn = mainPeer.connect("21061bed-4d7c-4a92-a905-2a1b884480b2");
+
+        DataConn.on('open', function () {
+            console.log('Connected to server');
+            // here you have conn.id
+            DataConn.send('hi!');
+        });
+
+        // 受信処理
+        DataConn.on('data', function (data) {
+            console.log('Received: ', data);
+
+            // ここで受信したデータを処理します
+            const parsedData = parseWhiteboardData(data as string);
+
+            setObjects(parsedData);
+        });
+
+        // コネクションを保持
+        setDataConnection(DataConn);
+
+        // 初期化済みのフラグを立てます
+        setLoading(false);
+    }, [loading]);
+
 
     return (
         <div className="relative w-screen h-screen overflow-hidden">
