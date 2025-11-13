@@ -1,21 +1,24 @@
 import React, { useCallback, useMemo } from 'react';
 import { WhiteboardSender } from './WhiteboardSender'; // WhiteboardSenderをインポート
-import { type DataConnection, Peer } from "peerjs";
+import {getPeer,getPeerConnection,setPeerConnection} from "./utils/peer"
+import type { DataConnection, MediaConnection } from 'peerjs';
 
 /**
  * デモ用メインアプリ
  */
 export default function App(): React.ReactElement {
+    // ビデオタグの参照
+    const videoRef = React.useRef<HTMLVideoElement>(null);
+
+    // 画面が共有されているか
+    const [isScreenShared, setIsScreenShared] = React.useState(false);
+
     // 初期化処理
     // 初期化を検知するフラグ
     const [loading, setLoading] = React.useState(true);
 
-    // peer を保持
-    const [mainPeer, setMainPeer] = React.useState<Peer | null>(null);
-
-    // データコネクション
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const [peerConnection, setPeerConnection] = React.useState<DataConnection | null>(null);
+    // 接続中の相手のID
+    const [connectedPeerId, setConnectedPeerId] = React.useState<string | null>(null);
 
     // コンポーネントの初期化時にのみサービスを呼び出します
     React.useEffect(() => {
@@ -24,36 +27,49 @@ export default function App(): React.ReactElement {
             return;
         }
 
-        // 初期化処理を実行します
-        const newPeer = new Peer("21061bed-4d7c-4a92-a905-2a1b884480b2");
-
-        newPeer.on('connection', function (conn) {
-            console.log("🎉 コネクションが確立されました");
-
-            conn.on('open', function () {
-                // here you have conn.id
-                conn.send('hi!');
-
-                console.log("🎉 接続が確立されました");
-
-                // コネクションを保持
-                // eslint-disable-next-line react-hooks/exhaustive-deps
-                setPeerConnection(conn);
-            });
-
-            conn.on("close", function () {
-                // コネクションを破棄
-                // eslint-disable-next-line react-hooks/exhaustive-deps
-                setPeerConnection(null);
-            })
-        });
-
-        // peer を保持
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        setMainPeer(newPeer);
-
         // 初期化済みのフラグを立てます
         setLoading(false);
+
+        // peerを初期化
+        const mainPeer = getPeer();
+
+        // peer接続
+        mainPeer.on("connection", (conn: DataConnection) => {
+            console.log("🎉 peer接続成功!");
+
+            console.log(conn.peer);
+
+            // 接続中の相手のID
+            setConnectedPeerId(conn.peer);
+            
+            // 接続情報を保存
+            setPeerConnection(conn.peer, conn);
+        });
+
+        // mediacall が来た時の処理
+        mainPeer.on("call", (call: MediaConnection) => {
+            call.on("stream", (stream: MediaStream) => {
+                console.log("🎉 mediacall stream!");
+
+                // videoタグにストリームを設定
+                videoRef.current!.srcObject = stream;
+
+                // 画面を共有している
+                setIsScreenShared(true);
+
+                // 接続中の相手のID
+                setConnectedPeerId(call.peer);
+            })
+
+            call.on("close", () => {
+                console.log("🎉 mediacall close!");
+                setIsScreenShared(false);
+            })
+
+            console.log("🎉 mediacall!");
+            call.answer();
+        });
+
     }, [loading]);
 
     // カスタム切断処理のコールバック
@@ -71,8 +87,27 @@ export default function App(): React.ReactElement {
         console.log("🎉 更新コールバック実行!");
         console.log(jsonString);
 
-        if (peerConnection) {
-            peerConnection.send(jsonString);
+        // 画面が共有されている場合データを送信する
+        if (isScreenShared) {
+            console.log("🎉 画面が共有されているのでデータを送信します!");
+
+            // 接続中の相手のIDがない場合は処理を抜けます
+            if (!connectedPeerId) {
+                console.log("🎉 接続中の相手のIDがありません!");
+                return;
+            }
+
+            // 相手の接続情報を取得
+            const remoteConnection = getPeerConnection(connectedPeerId);
+
+            // 相手の接続情報がない場合は処理を抜けます
+            if (!remoteConnection) {
+                console.log("🎉 相手の接続情報がありません!");
+                return;
+            }
+
+            // データを送信
+            remoteConnection.send(jsonString);
         }
     }
 
@@ -86,10 +121,12 @@ export default function App(): React.ReactElement {
                 loop
                 muted
                 playsInline
+
+                // 動画のサイズをフィット
                 // 絶対配置で全画面に広げ、オブジェクトフィットでカバー
-                className="absolute inset-0 w-full h-full object-cover"
-                // TODO: 実際の動画URLに置き換えてください
-                src="https://www.w3schools.com/tags/movie.mp4"
+                className="absolute inset-0 w-full h-full object-fill"
+                // ビデオタグの参照をセット
+                ref={videoRef}
             />
 
             {/* ホワイトボード (ビデオの上に絶対配置で重ねる) */}

@@ -85,7 +85,7 @@ const OBJECT_TYPES = {
 /**
  * 共通ヘルパー関数
  */
-// 正規化された座標から絶対座標への変換
+// ⭐️ 修正: denormalize は常に X軸 (width) 基準で行う
 const denormalize = (value: number, dimension: number): number => value * dimension;
 
 // 型ガード (RenderObjectでのみ使用)
@@ -93,7 +93,7 @@ const denormalize = (value: number, dimension: number): number => value * dimens
 
 
 /**
- * RenderObjectコンポーネント (描画ロジックの核)
+ * RenderObjectコンポーネント (描画ロジックの核) (修正)
  */
 interface RenderObjectProps {
     obj: WhiteboardObject;
@@ -112,6 +112,9 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize }) => {
         pointerEvents: "none" // 受信側なのでクリックイベントを無視
     };
 
+    // ⭐️ アスペクト比を計算
+    const aspectRatio = (canvasSize.width > 0) ? (canvasSize.height / canvasSize.width) : 1;
+
     // 受信側では編集機能は不要だが、TextObjectの参照は必要
     const textObject = obj.type === OBJECT_TYPES.TEXT ? (obj as TextObject) : null;
 
@@ -119,7 +122,8 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize }) => {
         case OBJECT_TYPES.PEN:
             const penObj = obj as PenObject;
             const polylinePoints = penObj.points.map(p =>
-                `${denormalize(p.x, canvasSize.width)},${denormalize(p.y, canvasSize.height)}`
+                // ⭐️ Y座標の非正規化を変更 (width と aspectRatio を使用)
+                `${denormalize(p.x, canvasSize.width)},${denormalize(p.y, canvasSize.width) * aspectRatio}`
             ).join(' ');
 
             return (
@@ -138,7 +142,8 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize }) => {
             if (!textObject) return null;
 
             const textX = denormalize(textObject.x, canvasSize.width);
-            const textY = denormalize(textObject.y, canvasSize.height);
+            // ⭐️ Y座標の非正規化を変更
+            const textY = denormalize(textObject.y, canvasSize.width) * aspectRatio;
 
             // 受信側なので編集モードは表示しない
             const textPreview = textObject.text || 'テキストを入力...';
@@ -160,9 +165,11 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize }) => {
             const rectObj = obj as RectangleObject;
             const rectProps = {
                 x: denormalize(rectObj.x, canvasSize.width),
-                y: denormalize(rectObj.y, canvasSize.height),
+                // ⭐️ Y座標の非正規化を変更
+                y: denormalize(rectObj.y, canvasSize.width) * aspectRatio,
                 width: denormalize(rectObj.width, canvasSize.width),
-                height: denormalize(rectObj.height, canvasSize.height),
+                // ⭐️ height の非正規化を変更
+                height: denormalize(rectObj.height, canvasSize.width) * aspectRatio,
                 rx: "2"
             };
             return (
@@ -179,9 +186,11 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize }) => {
             const circleObj = obj as CircleObject;
             const circleProps = {
                 cx: denormalize(circleObj.x, canvasSize.width),
-                cy: denormalize(circleObj.y, canvasSize.height),
+                // ⭐️ Y座標の非正規化を変更
+                cy: denormalize(circleObj.y, canvasSize.width) * aspectRatio,
                 rx: denormalize(circleObj.rx, canvasSize.width),
-                ry: denormalize(circleObj.ry, canvasSize.height),
+                // ⭐️ ry の非正規化を変更
+                ry: denormalize(circleObj.ry, canvasSize.width) * aspectRatio,
             };
             return (
                 <ellipse
@@ -197,9 +206,11 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize }) => {
             const lineObj = obj as LineObject;
             const lineProps = {
                 x1: denormalize(lineObj.x1, canvasSize.width),
-                y1: denormalize(lineObj.y1, canvasSize.height),
+                // ⭐️ Y座標の非正規化を変更
+                y1: denormalize(lineObj.y1, canvasSize.width) * aspectRatio,
                 x2: denormalize(lineObj.x2, canvasSize.width),
-                y2: denormalize(lineObj.y2, canvasSize.height),
+                // ⭐️ Y座標の非正規化を変更
+                y2: denormalize(lineObj.y2, canvasSize.width) * aspectRatio,
             };
             return (
                 <line
@@ -215,9 +226,11 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize }) => {
             const imageObj = obj as ImageObject;
             const imageProps = {
                 x: denormalize(imageObj.x, canvasSize.width),
-                y: denormalize(imageObj.y, canvasSize.height),
+                // ⭐️ Y座標の非正規化を変更
+                y: denormalize(imageObj.y, canvasSize.width) * aspectRatio,
                 width: denormalize(imageObj.width, canvasSize.width),
-                height: denormalize(imageObj.height, canvasSize.height),
+                // ⭐️ height の非正規化を変更
+                height: denormalize(imageObj.height, canvasSize.width) * aspectRatio,
                 href: imageObj.src,
             };
             return (
@@ -262,13 +275,20 @@ export const WhiteboardReceiver: React.FC<WhiteboardReceiverProps> = ({
         return () => window.removeEventListener('resize', updateSize);
     }, []);
 
+    // ⭐️ アスペクト比を計算 (useMemo)
+    const aspectRatio = useMemo(() => {
+        if (canvasSize.width === 0 || canvasSize.height === 0) return 1;
+        return canvasSize.height / canvasSize.width;
+    }, [canvasSize]);
+
     const absoluteLaserPos = useMemo(() => {
         if (!laserPointerPos || laserPointerPos.x < 0 || laserPointerPos.y < 0) return null;
         return {
             x: denormalize(laserPointerPos.x, canvasSize.width),
-            y: denormalize(laserPointerPos.y, canvasSize.height)
+            // ⭐️ Y座標の非正規化を変更
+            y: denormalize(laserPointerPos.y, canvasSize.width) * aspectRatio
         };
-    }, [laserPointerPos, canvasSize]);
+    }, [laserPointerPos, canvasSize, aspectRatio]); // ⭐️ aspectRatio を依存配列に追加
 
     return (
         // 絶対配置で全画面に広げ、ビデオの上に重ねる
@@ -324,20 +344,10 @@ export const WhiteboardReceiver: React.FC<WhiteboardReceiverProps> = ({
  */
 export const parseWhiteboardData = (jsonData: string): WhiteboardObject[] => {
     try {
-        const parsedData = JSON.parse(jsonData);
-
-        // JSON.parseの結果が配列であることを確認
-        if (!Array.isArray(parsedData)) {
-            console.error("Parse Error: Received data is not an array.", parsedData);
-            return [];
-        }
+        let parsedData = JSON.parse(jsonData);
 
         // 型チェック（簡易的なチェック。より厳密なバリデーションが必要な場合はライブラリ推奨）
-        const validObjects = parsedData.filter((obj) => {
-            // 必須プロパティ 'id' と 'type' が存在するかをチェック
-            return obj && typeof obj.id === 'string' && typeof obj.type === 'string' &&
-                Object.values(OBJECT_TYPES).includes(obj.type);
-        }) as WhiteboardObject[]; // フィルタリングされた後のオブジェクトは WhiteboardObject[] と見なす
+        const validObjects = [parsedData.data] as WhiteboardObject[]; // フィルタリングされた後のオブジェクトは WhiteboardObject[] と見なす
 
         return validObjects;
 

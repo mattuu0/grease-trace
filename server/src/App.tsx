@@ -10,19 +10,59 @@ import {
     parseWhiteboardData
 } from './whiteboardRecviver'; // WhiteboardReceiverをインポート
 
-// peerjs
-import { DataConnection, Peer } from "peerjs";
+// peerをインポート
+import { connectRemote, connectStream, getPeer } from './utils/peer';
 
-/**
- * デモ用メインアプリ (データのシミュレーションとReceiverの配置)
- */
+// 画面の選択を待っているか
+let waitSelectScreen = false;
+
+// 現在のストリームを保持する変数
+let currentStream: MediaStream | null = null;
+
+// 画面共有を取得する関数
+async function ShareScreen() {
+    // もしストリームがあるときそれを返す
+    if (currentStream) {
+        return currentStream;
+    }
+
+    // 画面選択待ち中なら待つ
+    if (waitSelectScreen) {
+        return null;
+    }
+
+    // 画面を共有している
+    waitSelectScreen = true;
+
+    try {
+        // ストリームを取得
+        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+
+        // 画面選択待ちを解除
+        waitSelectScreen = false;
+
+        // 現在のストリームを更新
+        currentStream = stream;
+
+        // イベント設定
+        stream.getVideoTracks()[0].addEventListener("ended", () => {
+            currentStream = null;
+        });
+
+        return stream;
+    } catch (error) {
+        console.log(error);
+
+        waitSelectScreen = false;
+
+        return null;
+    }
+}
+
 export default function App(): React.ReactElement {
 
     const [objects, setObjects] = useState<WhiteboardObject[]>([]);
     const [laserPos, setLaserPos] = useState<Point | null>(null);
-
-    // コネクション
-    const [dataConnection, setDataConnection] = useState<DataConnection | null>(null);
 
     // 初期化関数
     // 初期化を検知するフラグ
@@ -35,35 +75,61 @@ export default function App(): React.ReactElement {
             return;
         }
 
-        console.log("🎉 初期化処理実行!");
-
-        // 初期化処理を実行します
-        const mainPeer = new Peer(crypto.randomUUID());
-
-        // コネクションを開始します
-        const DataConn = mainPeer.connect("21061bed-4d7c-4a92-a905-2a1b884480b2");
-
-        DataConn.on('open', function () {
-            console.log('Connected to server');
-            // here you have conn.id
-            DataConn.send('hi!');
-        });
-
-        // 受信処理
-        DataConn.on('data', function (data) {
-            console.log('Received: ', data);
-
-            // ここで受信したデータを処理します
-            const parsedData = parseWhiteboardData(data as string);
-
-            setObjects(parsedData);
-        });
-
-        // コネクションを保持
-        setDataConnection(DataConn);
-
         // 初期化済みのフラグを立てます
         setLoading(false);
+
+        console.log("🎉 初期化処理実行!");
+
+        // 接続
+        const connection = connectRemote("21061bed-4d7c-4a92-a905-2a1b884480b2");
+
+        // コールバックを設定
+        connection.on("data", (data: any) => {
+            console.log("🎉 受信コールバック実行!");
+            
+            // jsonに変換
+            const parsedData = JSON.parse(data);
+
+            console.log(parsedData);
+
+            // operation の時
+            if (parsedData["type"] == "operation") {
+                // 削除の時
+                if (parsedData["op_type"] == "delete") {
+                    // 削除するオブジェクトを探す
+                    setObjects((prevObjects) => prevObjects.filter((object) => object.id != parsedData["data"]["id"]));
+                    return;
+                } else if (parsedData["op_type"] == "update") {
+                    // オブジェクトを送信
+                    setObjects((prevObjects) => prevObjects.map((object) => object.id == parsedData["data"]["id"] ? parsedData["data"] : object));
+                    return;
+                } 
+
+                // jsonにパース
+                // 型チェック（簡易的なチェック。より厳密なバリデーションが必要な場合はライブラリ推奨）
+                const validObjects = [parsedData.data] as WhiteboardObject[]; // フィルタリングされた後のオブジェクトは WhiteboardObject[] と見なす
+
+                console.log(validObjects);
+
+                // データをセット (新規で追加)
+                setObjects((prevObjects) => [...prevObjects, ...validObjects]);
+            }
+        });
+
+        connection.on("open", () => {
+            console.log("🎉 接続コールバック実行!");
+
+            // 画面共有を取得
+            ShareScreen().then((stream) => {
+                if (!stream) {
+                    return;
+                }
+
+                // ストリームを送信
+                connectStream("21061bed-4d7c-4a92-a905-2a1b884480b2", stream);
+            });
+        });
+
     }, [loading]);
 
 

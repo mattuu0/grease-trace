@@ -1,0 +1,62 @@
+import { type DataConnection, Peer } from "peerjs";
+
+// Peerインスタンス
+let peer: Peer | null = null;
+// connectionの管理
+const connectionMap: Map<string, DataConnection> = new Map<string, DataConnection>();
+
+// Peerインスタンスを取得
+export function getPeer() {
+    // Peerインスタンスを返却
+    if (!peer) {
+        // Peerインスタンスを初期化
+        peer = new Peer("21061bed-4d7c-4a92-a905-2a1b884480b2",{
+            host: "localhost",
+            port: 9000,
+            path: "/myapp"
+        });
+    }
+
+    // Peerインスタンスを返却
+    return peer;
+}
+
+// peerを破棄
+export function destroyPeer() {
+    // Peerインスタンスを破棄
+    if (peer) {
+        peer.destroy();
+        peer = null;
+    }
+}
+
+// peerに接続
+export function connectRemote(remotePeerId: string) : DataConnection {
+    // Peerインスタンスを取得
+    const peer = getPeer();
+
+    // 接続を確立
+    const connection = peer.connect(remotePeerId);
+
+    // 接続を管理
+    connectionMap.set(remotePeerId, connection);
+
+    // イベントを設定
+    connection.on("close", () => {
+        // 接続を破棄
+        connectionMap.delete(remotePeerId);
+    });
+
+    // 接続を返却
+    return connection;
+}
+
+// 相手の接続情報を取得
+export function getPeerConnection(remotePeerId: string) : DataConnection | undefined {
+    return connectionMap.get(remotePeerId);
+}
+
+// 接続情報を保存する
+export function setPeerConnection(remotePeerId: string, connection: DataConnection) {
+    connectionMap.set(remotePeerId, connection);
+}
