@@ -106,7 +106,7 @@ const generateId = (): string => crypto.randomUUID();
 /**
  * 正規化座標 ⇔ 絶対座標の変換ユーティリティ (修正)
  */
-// ⭐️ 正規化は常に X軸 (width) 基準で行う
+// ⭐️ 正規化は XとYで呼び出し元が dimension を使い分ける
 const normalize = (value: number, dimension: number): number => value / dimension;
 const denormalize = (value: number, dimension: number): number => value * dimension;
 
@@ -139,28 +139,27 @@ const isResizable = (o: WhiteboardObject): o is RectangleObject | CircleObject |
  */
 interface AbsoluteBounds { x: number, y: number, width: number, height: number }
 const getShapeBounds = (obj: ShapeObject | TextObject, canvasSize: { width: number; height: number }): AbsoluteBounds => {
-    // ⭐️ アスペクト比
-    const aspectRatio = (canvasSize.width > 0) ? (canvasSize.height / canvasSize.width) : 1;
+    // ⭐️ アスペクト比の計算を削除
 
     if (obj.type === OBJECT_TYPES.TEXT || obj.type === OBJECT_TYPES.RECTANGLE || obj.type === OBJECT_TYPES.IMAGE) {
         const rectObj = obj as RectangleObject | ImageObject | TextObject;
         return {
             x: denormalize(rectObj.x, canvasSize.width),
-            // ⭐️ Y座標の非正規化を変更
-            y: denormalize(rectObj.y, canvasSize.width) * aspectRatio,
+            // ⭐️ Y座標の非正規化を height 基準に戻す
+            y: denormalize(rectObj.y, canvasSize.height),
             width: denormalize(rectObj.width, canvasSize.width),
-            // ⭐️ height の非正規化を変更
-            height: denormalize(rectObj.height, canvasSize.width) * aspectRatio
+            // ⭐️ height の非正規化を height 基準に戻す
+            height: denormalize(rectObj.height, canvasSize.height)
         };
     }
     if (obj.type === OBJECT_TYPES.CIRCLE) {
         const circleObj = obj as CircleObject;
         const cx = denormalize(circleObj.x, canvasSize.width);
-        // ⭐️ Y座標の非正規化を変更
-        const cy = denormalize(circleObj.y, canvasSize.width) * aspectRatio;
+        // ⭐️ Y座標の非正規化を height 基準に戻す
+        const cy = denormalize(circleObj.y, canvasSize.height);
         const rx = denormalize(circleObj.rx, canvasSize.width);
-        // ⭐️ ry の非正規化を変更
-        const ry = denormalize(circleObj.ry, canvasSize.width) * aspectRatio;
+        // ⭐️ ry の非正規化を height 基準に戻す
+        const ry = denormalize(circleObj.ry, canvasSize.height);
         return {
             x: cx - rx,
             y: cy - ry,
@@ -178,7 +177,7 @@ const checkHandleHit = (obj: WhiteboardObject, selectedId: string | null, absX: 
     // ... (省略) ...
     if (obj.id !== selectedId || !isResizable(obj)) return null;
 
-    // ⭐️ 修正済みの getShapeBounds を使用
+    // ⭐️ 修正済みの getShapeBounds を使用 (内部ロジックは height 基準に戻っている)
     const bounds = getShapeBounds(obj, canvasSize);
     const { x, y, width, height } = bounds;
 
@@ -213,10 +212,9 @@ const calculateResizedObject = (startObj: WhiteboardObject, dx: number, dy: numb
     const startShapeObj = startObj as RectangleObject | CircleObject | ImageObject | TextObject;
     const canvasW = canvasSize.width;
     const canvasH = canvasSize.height;
-    // ⭐️ アスペクト比
-    const aspectRatio = (canvasW > 0) ? (canvasH / canvasW) : 1;
+    // ⭐️ アスペクト比の計算を削除
 
-    // ⭐️ 修正済みの getShapeBounds を使用
+    // ⭐️ 修正済みの getShapeBounds を使用 (内部ロジックは height 基準に戻っている)
     const startBounds = getShapeBounds(startShapeObj, canvasSize);
 
     // 現在の絶対座標の境界ボックス (左上X, Y, 幅, 高さ)
@@ -259,17 +257,15 @@ const calculateResizedObject = (startObj: WhiteboardObject, dx: number, dy: numb
     }
 
     // 2. 正規化された新しいプロパティを計算
-    // ⭐️ Y関連の正規化を変更
+    // ⭐️ Y関連の正規化を height 基準に戻す
     const newW = normalize(newAbsW, canvasW);
-    const newH_normalized_by_width = normalize(newAbsH, canvasW);
-    // ゼロ除算を避ける
-    const newH = (aspectRatio === 0) ? 0 : (newH_normalized_by_width / aspectRatio);
+    const newH = normalize(newAbsH, canvasH);
+
 
     if (startShapeObj.type === OBJECT_TYPES.RECTANGLE || startShapeObj.type === OBJECT_TYPES.IMAGE || startShapeObj.type === OBJECT_TYPES.TEXT) {
-        // ⭐️ Y関連の正規化を変更
+        // ⭐️ Y関連の正規化を height 基準に戻す
         const newX = normalize(newAbsX, canvasW);
-        const newY_normalized_by_width = normalize(newAbsY, canvasW);
-        const newY = (aspectRatio === 0) ? 0 : (newY_normalized_by_width / aspectRatio);
+        const newY = normalize(newAbsY, canvasH);
 
         if (startShapeObj.type === OBJECT_TYPES.TEXT) {
             // (fontSize の計算ロジック)
@@ -300,16 +296,14 @@ const calculateResizedObject = (startObj: WhiteboardObject, dx: number, dy: numb
 
     } else if (startShapeObj.type === OBJECT_TYPES.CIRCLE) {
         // 円/楕円
-        // ⭐️ Y関連の正規化を変更
+        // ⭐️ Y関連の正規化を height 基準に戻す
         const newX_center_norm = normalize(newAbsX + newAbsW / 2, canvasW); // 中心X
-        const newY_center_px = newAbsY + newAbsH / 2;
-        const newY_center_norm_by_width = normalize(newY_center_px, canvasW);
-        const newY = (aspectRatio === 0) ? 0 : (newY_center_norm_by_width / aspectRatio); // 中心Y
+        const newY_center_norm = normalize(newAbsY + newAbsH / 2, canvasH); // 中心Y
 
         return {
             ...startShapeObj,
             x: newX_center_norm,
-            y: newY,
+            y: newY_center_norm,
             rx: newW / 2,
             ry: newH / 2
         } as CircleObject;
@@ -342,8 +336,7 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize, isSelected
         opacity: 1,
     };
 
-    // ⭐️ アスペクト比を計算
-    const aspectRatio = (canvasSize.width > 0) ? (canvasSize.height / canvasSize.width) : 1;
+    // ⭐️ アスペクト比の計算を削除
 
     const textRef = useRef<HTMLTextAreaElement>(null);
     const textObject = obj.type === OBJECT_TYPES.TEXT ? (obj as TextObject) : null;
@@ -359,7 +352,7 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize, isSelected
 
     if (isSelected && isResizable(obj) && !isEditing) {
         const shapeObj = obj as RectangleObject | CircleObject | ImageObject | TextObject;
-        // ⭐️ 修正済みの getShapeBounds を使用
+        // ⭐️ 修正済みの getShapeBounds を使用 (内部ロジックは height 基準に戻っている)
         const bounds = getShapeBounds(shapeObj, canvasSize);
         const { x, y, width, height } = bounds;
 
@@ -427,8 +420,8 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize, isSelected
         case OBJECT_TYPES.PEN:
             const penObj = obj as PenObject;
             const polylinePoints = penObj.points.map(p =>
-                // ⭐️ Y座標の非正規化を変更
-                `${denormalize(p.x, canvasSize.width)},${denormalize(p.y, canvasSize.width) * aspectRatio}`
+                // ⭐️ Y座標の非正規化を height 基準に戻す
+                `${denormalize(p.x, canvasSize.width)},${denormalize(p.y, canvasSize.height)}`
             ).join(' ');
 
             return (
@@ -461,11 +454,11 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize, isSelected
             if (!textObject) return null;
 
             const textX = denormalize(textObject.x, canvasSize.width);
-            // ⭐️ Y座標の非正規化を変更
-            const textY = denormalize(textObject.y, canvasSize.width) * aspectRatio;
+            // ⭐️ Y座標の非正規化を height 基準に戻す
+            const textY = denormalize(textObject.y, canvasSize.height);
 
             if (isEditing) {
-                // ⭐️ 修正済みの getShapeBounds を使用
+                // ⭐️ 修正済みの getShapeBounds を使用 (内部ロジックは height 基準に戻っている)
                 const bounds = getShapeBounds(textObject, canvasSize);
                 return (
                     <foreignObject
@@ -527,11 +520,11 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize, isSelected
             const rectObj = obj as RectangleObject;
             const rectProps = {
                 x: denormalize(rectObj.x, canvasSize.width),
-                // ⭐️ Y座標の非正規化を変更
-                y: denormalize(rectObj.y, canvasSize.width) * aspectRatio,
+                // ⭐️ Y座標の非正規化を height 基準に戻す
+                y: denormalize(rectObj.y, canvasSize.height),
                 width: denormalize(rectObj.width, canvasSize.width),
-                // ⭐️ height の非正規化を変更
-                height: denormalize(rectObj.height, canvasSize.width) * aspectRatio,
+                // ⭐️ height の非正規化を height 基準に戻す
+                height: denormalize(rectObj.height, canvasSize.height),
                 rx: "2"
             };
             return (
@@ -552,11 +545,11 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize, isSelected
             const circleObj = obj as CircleObject;
             const circleProps = {
                 cx: denormalize(circleObj.x, canvasSize.width),
-                // ⭐️ Y座標の非正規化を変更
-                cy: denormalize(circleObj.y, canvasSize.width) * aspectRatio,
+                // ⭐️ Y座標の非正規化を height 基準に戻す
+                cy: denormalize(circleObj.y, canvasSize.height),
                 rx: denormalize(circleObj.rx, canvasSize.width),
-                // ⭐️ ry の非正規化を変更
-                ry: denormalize(circleObj.ry, canvasSize.width) * aspectRatio,
+                // ⭐️ ry の非正規化を height 基準に戻す
+                ry: denormalize(circleObj.ry, canvasSize.height),
             };
             return (
                 <g>
@@ -576,11 +569,11 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize, isSelected
             const lineObj = obj as LineObject;
             const lineProps = {
                 x1: denormalize(lineObj.x1, canvasSize.width),
-                // ⭐️ Y座標の非正規化を変更
-                y1: denormalize(lineObj.y1, canvasSize.width) * aspectRatio,
+                // ⭐️ Y座標の非正規化を height 基準に戻す
+                y1: denormalize(lineObj.y1, canvasSize.height),
                 x2: denormalize(lineObj.x2, canvasSize.width),
-                // ⭐️ Y座標の非正規化を変更
-                y2: denormalize(lineObj.y2, canvasSize.width) * aspectRatio,
+                // ⭐️ Y座標の非正規化を height 基準に戻す
+                y2: denormalize(lineObj.y2, canvasSize.height),
             };
             return (
                 <g>
@@ -608,11 +601,11 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize, isSelected
             const imageObj = obj as ImageObject;
             const imageProps = {
                 x: denormalize(imageObj.x, canvasSize.width),
-                // ⭐️ Y座標の非正規化を変更
-                y: denormalize(imageObj.y, canvasSize.width) * aspectRatio,
+                // ⭐️ Y座標の非正規化を height 基準に戻す
+                y: denormalize(imageObj.y, canvasSize.height),
                 width: denormalize(imageObj.width, canvasSize.width),
-                // ⭐️ height の非正規化を変更
-                height: denormalize(imageObj.height, canvasSize.width) * aspectRatio,
+                // ⭐️ height の非正規化を height 基準に戻す
+                height: denormalize(imageObj.height, canvasSize.height),
                 href: imageObj.src,
             };
             return (
@@ -651,12 +644,8 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState<boolean>(false);
     const [canvasSize, setCanvasSize] = useState<{ width: number, height: number }>({ width: 800, height: 600 });
-    
-    // ⭐️ アスペクト比を計算する useMemo を追加
-    const aspectRatio = useMemo(() => {
-        if (canvasSize.width === 0 || canvasSize.height === 0) return 1;
-        return canvasSize.height / canvasSize.width;
-    }, [canvasSize]);
+
+    // ⭐️ アスペクト比の useMemo を削除
 
     const [dragStartObject, setDragStartObject] = useState<WhiteboardObject | null>(null);
 
@@ -800,33 +789,28 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
     const getNormalizedPosition = useCallback((e: React.MouseEvent<SVGSVGElement>): Point => {
         if (!canvasRef.current) return { x: 0, y: 0 };
         const rect = canvasRef.current.getBoundingClientRect();
-        
-        const y_pixels = e.clientY - rect.top;
-        // ⭐️ Y座標の正規化を変更
-        // ピクセルY を (width基準) に変換し、アスペクト比で割る
-        const normalized_y_based_on_width = normalize(y_pixels, canvasSize.width);
 
+        // ⭐️ Y座標の正規化を height 基準に戻す
         return {
             x: normalize(e.clientX - rect.left, canvasSize.width),
-            y: (aspectRatio === 0) ? 0 : (normalized_y_based_on_width / aspectRatio)
+            y: normalize(e.clientY - rect.top, canvasSize.height)
         };
-    }, [canvasSize, aspectRatio]); // ⭐️ 依存配列に canvasSize と aspectRatio を追加
+    }, [canvasSize]); // ⭐️ 依存配列から aspectRatio を削除
 
     /**
      * ポイントがオブジェクト内にあるか判定 (修正)
      */
     const isPointInObject = (obj: WhiteboardObject, x: number, y: number): boolean => {
         // (x, y は正規化座標)
-        
-        // ⭐️ アスペクト比 (再計算)
-        const currentAspectRatio = (canvasSize.width > 0) ? (canvasSize.height / canvasSize.width) : 1;
-        // ⭐️ ピクセル座標に変換
+
+        // ⭐️ アスペクト比の計算を削除
+        // ⭐️ ピクセル座標に変換 (height 基準)
         const absX = denormalize(x, canvasSize.width);
-        const absY = denormalize(y, canvasSize.width) * currentAspectRatio;
+        const absY = denormalize(y, canvasSize.height);
 
 
         if (isResizable(obj)) {
-            // ⭐️ 修正済みの getShapeBounds を使用
+            // ⭐️ 修正済みの getShapeBounds を使用 (内部ロジックは height 基準に戻っている)
             const bounds = getShapeBounds(obj, canvasSize);
             return absX >= bounds.x && absX <= bounds.x + bounds.width &&
                 absY >= bounds.y && absY <= bounds.y + bounds.height;
@@ -834,11 +818,11 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
 
         // Line, Penのロジック
         if (obj.type === OBJECT_TYPES.LINE) {
-            // ⭐️ Y座標の非正規化を変更
+            // ⭐️ Y座標の非正規化を height 基準に戻す
             const x1 = denormalize(obj.x1, canvasSize.width);
-            const y1 = denormalize(obj.y1, canvasSize.width) * currentAspectRatio;
+            const y1 = denormalize(obj.y1, canvasSize.height);
             const x2 = denormalize(obj.x2, canvasSize.width);
-            const y2 = denormalize(obj.y2, canvasSize.width) * currentAspectRatio;
+            const y2 = denormalize(obj.y2, canvasSize.height);
 
             const A = absX - x1;
             const B = absY - y1;
@@ -867,11 +851,11 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
 
         if (obj.type === OBJECT_TYPES.PEN) {
             for (let i = 0; i < obj.points.length - 1; i++) {
-                // ⭐️ Y座標の非正規化を変更
+                // ⭐️ Y座標の非正規化を height 基準に戻す
                 const x1 = denormalize(obj.points[i].x, canvasSize.width);
-                const y1 = denormalize(obj.points[i].y, canvasSize.width) * currentAspectRatio;
+                const y1 = denormalize(obj.points[i].y, canvasSize.height);
                 const x2 = denormalize(obj.points[i + 1].x, canvasSize.width);
-                const y2 = denormalize(obj.points[i + 1].y, canvasSize.width) * currentAspectRatio;
+                const y2 = denormalize(obj.points[i + 1].y, canvasSize.height);
 
                 const A = absX - x1;
                 const B = absY - y1;
@@ -946,11 +930,7 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
                 setDragStartObject(null);
             }
         } else if (tool === 'text') {
-            // ⭐️ Y関連の正規化を変更
-            const initialHeightPx = 30;
-            const initialHeightNormByWidth = normalize(initialHeightPx, canvasSize.width);
-            const initialHeightNorm = (aspectRatio === 0) ? 0 : (initialHeightNormByWidth / aspectRatio);
-
+            // ⭐️ Y関連の正規化を height 基準に戻す
             const newObj: TextObject = {
                 id: generateId(),
                 type: OBJECT_TYPES.TEXT,
@@ -961,7 +941,7 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
                 text: "",
                 fontSize: lineWidth * 10,
                 width: normalize(200, canvasSize.width),
-                height: initialHeightNorm // ⭐️ 変更
+                height: normalize(30, canvasSize.height) // ⭐️ 変更
             };
             setObjects(prev => [...prev, newObj]);
             // ⭐️ 新規オブジェクトの追加を外部に通知
@@ -989,7 +969,7 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
             setStartPos(pos);
             setLaserAnnotationPoints([pos]);
 
-            // ⭐️ レーザークリック操作を外部に通知
+            // ⭐️ 修正: レーザークリック操作を外部に通知
             onUpdateCallback?.(emitOperation('laser_click', { x: pos.x, y: pos.y }));
 
         } else {
@@ -1035,22 +1015,28 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
             }
 
             if (isDrawing && isLaserAnnotationActive) {
+                // ⭐️ isDrawing時にcurrentPointsではなくlaserAnnotationPointsを更新
                 setLaserAnnotationPoints(prev => [...prev, pos]);
             }
 
             const now = Date.now();
             if (now - lastEmitTimeRef.current > EMIT_INTERVAL) {
-                // ⭐️ レーザー移動操作を外部に通知
-                onUpdateCallback?.(emitOperation('laser_move', { x: pos.x, y: pos.y }));
+                // ⭐️ 修正: レーザー移動操作を外部に通知 (アノテーション座標を含める)
+                onUpdateCallback?.(emitOperation('laser_move', {
+                    x: pos.x,
+                    y: pos.y,
+                    // ⭐️ 追加: アノテーションの全座標を送信
+                    annotation: isLaserAnnotationActive ? laserAnnotationPoints : []
+                }));
                 lastEmitTimeRef.current = now;
             }
             return;
         }
 
         if (tool === 'select' && isResizing && selectedId && dragStartObject && resizingHandle) {
+            // ⭐️ dx, dy (ピクセル) の計算を height 基準に戻す
             const dx = denormalize(pos.x - startPos!.x, canvasSize.width);
-            // ⭐️ dy (ピクセル) の計算を変更
-            const dy = (denormalize(pos.y, canvasSize.width) * aspectRatio) - (denormalize(startPos!.y, canvasSize.width) * aspectRatio);
+            const dy = denormalize(pos.y - startPos!.y, canvasSize.height);
 
             const newObj = calculateResizedObject(dragStartObject, dx, dy, resizingHandle, canvasSize);
 
@@ -1134,14 +1120,23 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
             setDragStartObject(null);
         } else if (tool === 'laser' && isDrawing && isLaserAnnotationActive) {
             setIsDrawing(false);
-            setIsLaserAnnotationActive(false);
+            // setIsLaserAnnotationActive(false); // 停止時に `laser_move` で空配列を送るため、ここでは維持
             setStartPos(null);
-            setLaserAnnotationPoints([]);
+            // setLaserAnnotationPoints([]); // 停止時に `laser_move` で空配列を送るため、ここでは維持
+
+            // 最後の座標とアノテーションを送信し、その後停止を通知
+            onUpdateCallback?.(emitOperation('laser_move', {
+                x: getNormalizedPosition(e).x,
+                y: getNormalizedPosition(e).y,
+                annotation: laserAnnotationPoints, // 最後に描画した全座標
+            }));
 
             if (laserTimeoutRef.current) clearTimeout(laserTimeoutRef.current);
             laserTimeoutRef.current = setTimeout(() => {
-                // ⭐️ レーザー停止操作を外部に通知
-                onUpdateCallback?.(emitOperation('laser_move', { x: -1, y: -1 }));
+                // ⭐️ 修正: レーザー停止操作を外部に通知 (座標を無効化し、アノテーションを空にする)
+                onUpdateCallback?.(emitOperation('laser_move', { x: -1, y: -1, annotation: [] }));
+                setIsLaserAnnotationActive(false);
+                setLaserAnnotationPoints([]);
             }, 300);
 
         } else if (isDrawing && startPos) {
@@ -1172,8 +1167,8 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
         if (tool === 'laser' && !isLaserAnnotationActive) {
             if (laserTimeoutRef.current) clearTimeout(laserTimeoutRef.current);
             laserTimeoutRef.current = setTimeout(() => {
-                // ⭐️ レーザー停止操作を外部に通知
-                onUpdateCallback?.(emitOperation('laser_move', { x: -1, y: -1 }));
+                // ⭐️ 修正: レーザー停止操作を外部に通知 (座標を無効化し、アノテーションを空にする)
+                onUpdateCallback?.(emitOperation('laser_move', { x: -1, y: -1, annotation: [] }));
             }, 300);
         } else if (tool !== 'laser') {
             setMousePos(null);
@@ -1196,8 +1191,8 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
         if (tool === 'laser') {
             if (laserTimeoutRef.current) clearTimeout(laserTimeoutRef.current);
             laserTimeoutRef.current = setTimeout(() => {
-                // ⭐️ レーザー停止操作を外部に通知
-                onUpdateCallback?.(emitOperation('laser_move', { x: -1, y: -1 }));
+                // ⭐️ 修正: レーザー停止操作を外部に通知 (座標を無効化し、アノテーションを空にする)
+                onUpdateCallback?.(emitOperation('laser_move', { x: -1, y: -1, annotation: [] }));
             }, 300);
         }
 
@@ -1294,9 +1289,8 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
                 const imgW = img.width;
                 const imgH = img.height;
                 const canvasW = canvasSize.width;
-                // const canvasH = canvasSize.height; // (古い)
-                // ⭐️ アスペクト比 (再計算)
-                const currentAspectRatio = (canvasW > 0) ? (canvasSize.height / canvasW) : 1;
+                const canvasH = canvasSize.height; // ⭐️ canvasH を使用
+                // ⭐️ アスペクト比の計算を削除
 
                 const initialNormalizedWidth = 0.15;
                 const initialPixelWidth = denormalize(initialNormalizedWidth, canvasW);
@@ -1304,13 +1298,9 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
                 const ratio = imgH / imgW;
                 const initialPixelHeight = initialPixelWidth * ratio;
 
-                // ⭐️ Y関連の正規化を変更
-                const initialNormalizedHeight_by_width = normalize(initialPixelHeight, canvasW);
-                const initialNormalizedHeight = (currentAspectRatio === 0) ? 0 : (initialNormalizedHeight_by_width / currentAspectRatio);
-
-                const initialY_px = (canvasSize.height / 2) - (initialPixelHeight / 2);
-                const initialY_norm_by_width = normalize(initialY_px, canvasW);
-                const initialY_norm = (currentAspectRatio === 0) ? 0 : (initialY_norm_by_width / currentAspectRatio);
+                // ⭐️ Y関連の正規化を height 基準に戻す
+                const initialNormalizedHeight = normalize(initialPixelHeight, canvasH);
+                const initialY_norm = 0.5 - initialNormalizedHeight / 2;
 
 
                 const newObj: ImageObject = {
@@ -1354,38 +1344,38 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
     const previewShapeProps = useMemo(() => {
         if (!isDrawing || tool === 'pen' || tool === 'laser' || !startPos || currentPoints.length === 0) return null;
         const endPos = currentPoints[currentPoints.length - 1];
-        // ⭐️ アスペクト比 (useMemo の aspectRatio を使用)
+        // ⭐️ アスペクト比の計算を削除
 
         if (tool === 'rectangle') {
             const x = denormalize(Math.min(startPos.x, endPos.x), canvasSize.width);
-            // ⭐️ Y座標の非正規化を変更
-            const y = denormalize(Math.min(startPos.y, endPos.y), canvasSize.width) * aspectRatio;
+            // ⭐️ Y座標の非正規化を height 基準に戻す
+            const y = denormalize(Math.min(startPos.y, endPos.y), canvasSize.height);
             const width = Math.abs(denormalize(endPos.x - startPos.x, canvasSize.width));
-            // ⭐️ height の非正規化を変更
-            const height = Math.abs(denormalize(endPos.y - startPos.y, canvasSize.width) * aspectRatio);
+            // ⭐️ height の非正規化を height 基準に戻す
+            const height = Math.abs(denormalize(endPos.y - startPos.y, canvasSize.height));
             return { x, y, width, height };
         }
         if (tool === 'circle') {
             const cx = denormalize((startPos.x + endPos.x) / 2, canvasSize.width);
-            // ⭐️ Y座標の非正規化を変更
-            const cy = denormalize((startPos.y + endPos.y) / 2, canvasSize.width) * aspectRatio;
+            // ⭐️ Y座標の非正規化を height 基準に戻す
+            const cy = denormalize((startPos.y + endPos.y) / 2, canvasSize.height);
             const rx = Math.abs(denormalize(endPos.x - startPos.x, canvasSize.width)) / 2;
-            // ⭐️ ry の非正規化を変更
-            const ry = Math.abs(denormalize(endPos.y - startPos.y, canvasSize.width) * aspectRatio) / 2;
+            // ⭐️ ry の非正規化を height 基準に戻す
+            const ry = Math.abs(denormalize(endPos.y - startPos.y, canvasSize.height)) / 2;
             return { cx, cy, rx, ry };
         }
 
         if (tool === 'line') {
             const x1 = denormalize(startPos.x, canvasSize.width);
-            // ⭐️ Y座標の非正規化を変更
-            const y1 = denormalize(startPos.y, canvasSize.width) * aspectRatio;
+            // ⭐️ Y座標の非正規化を height 基準に戻す
+            const y1 = denormalize(startPos.y, canvasSize.height);
             const x2 = denormalize(endPos.x, canvasSize.width);
-            // ⭐️ Y座標の非正規化を変更
-            const y2 = denormalize(endPos.y, canvasSize.width) * aspectRatio;
+            // ⭐️ Y座標の非正規化を height 基準に戻す
+            const y2 = denormalize(endPos.y, canvasSize.height);
             return { x1, y1, x2, y2 };
         }
         return null;
-    }, [isDrawing, tool, startPos, currentPoints, canvasSize, aspectRatio]); // ⭐️ canvasSize, aspectRatio を依存配列に追加
+    }, [isDrawing, tool, startPos, currentPoints, canvasSize]); // ⭐️ 依存配列から aspectRatio を削除
 
     // カーソルスタイル計算 (省略)
     const svgCursorStyle = useMemo(() => {
@@ -1570,8 +1560,8 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
                     {isDrawing && tool !== 'laser' && tool === 'pen' && currentPoints.length > 1 && (
                         <polyline
                             points={currentPoints.map(p =>
-                                // ⭐️ Y座標の非正規化を変更
-                                `${denormalize(p.x, canvasSize.width)},${denormalize(p.y, canvasSize.width) * aspectRatio}`
+                                // ⭐️ Y座標の非正規化を height 基準に戻す
+                                `${denormalize(p.x, canvasSize.width)},${denormalize(p.y, canvasSize.height)}`
                             ).join(' ')}
                             fill="none"
                             stroke={color}
@@ -1622,8 +1612,8 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
                     {tool === 'laser' && isLaserAnnotationActive && laserAnnotationPoints.length > 1 && (
                         <polyline
                             points={laserAnnotationPoints.map(p =>
-                                // ⭐️ Y座標の非正規化を変更
-                                `${denormalize(p.x, canvasSize.width)},${denormalize(p.y, canvasSize.width) * aspectRatio}`
+                                // ⭐️ Y座標の非正規化を height 基準に戻す
+                                `${denormalize(p.x, canvasSize.width)},${denormalize(p.y, canvasSize.height)}`
                             ).join(' ')}
                             fill="none"
                             stroke="#ff4136"

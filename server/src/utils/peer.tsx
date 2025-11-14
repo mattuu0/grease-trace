@@ -12,11 +12,7 @@ export function getPeer() {
     // Peerインスタンスを返却
     if (!peer) {
         // Peerインスタンスを初期化
-        peer = new Peer(crypto.randomUUID(),{
-            host: "localhost",
-            port: 9000,
-            path: "/myapp"
-        });
+        peer = new Peer(crypto.randomUUID());
     }
 
     // Peerインスタンスを返却

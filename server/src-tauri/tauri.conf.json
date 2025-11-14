@@ -13,8 +13,17 @@
     "windows": [
       {
         "title": "server",
-        "width": 800,
-        "height": 600
+        "transparent": true,
+        "x": 0,
+        "y": 0,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "closable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "resizable": false,
+        "shadow": false,
+        "contentProtected": true
       }
     ],
     "security": {
