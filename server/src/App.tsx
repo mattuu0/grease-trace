@@ -119,9 +119,6 @@ export default function App(): React.ReactElement {
     const [loading, setLoading] = React.useState(true);
 
     async function Init() {
-        // マウスを除外する
-        getCurrentWindow().setIgnoreCursorEvents(true);
-
         // ウィンドウを取得
         const CurrentWindow = getCurrentWindow();
         const monitor = await currentMonitor();
@@ -142,6 +139,8 @@ export default function App(): React.ReactElement {
         connection.on("open", () => {
             console.log("🎉 接続成功!");
             setConnectionStatus("connected");
+            // 接続が成功したらマウスイベントを無視する
+            getCurrentWindow().setIgnoreCursorEvents(true);
             ShareScreenToRemote(remotePeerId);
         });
 
@@ -173,6 +172,8 @@ export default function App(): React.ReactElement {
         connection.on("close", () => {
             console.log("🎉 接続がクローズされました");
             setConnectionStatus("unconnected");
+            // 接続が切れたらマウスイベントを再度有効にする
+            getCurrentWindow().setIgnoreCursorEvents(false);
             setObjects([]);
             setLaserPos(null);
             setLaserAnnotationPoints([]);
@@ -212,38 +213,59 @@ export default function App(): React.ReactElement {
 
 
     return (
-        <div className="relative w-screen h-screen overflow-hidden">
+        <div className="relative w-screen h-screen overflow-hidden bg-transparent">
             {connectionStatus !== "connected" && (
-                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-gray-800 bg-opacity-90 text-white">
-                    <h1 className="text-3xl font-bold mb-4">Whiteboard Screen Share</h1>
-                    {connectionStatus === "unconnected" && (
-                        <div className="flex flex-col items-center">
-                             <p className="text-xl mb-4">IDを入力して接続してください</p>
-                             <input
-                                type="text"
-                                value={manualPeerId}
-                                onChange={(e) => setManualPeerId(e.target.value)}
-                                className="p-2 border rounded w-80 text-center text-black mb-4"
-                                placeholder="相手のIDを入力"
-                            />
-                            <div className="flex gap-4">
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-200">
+                    <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-lg">
+                        <h1 className="text-3xl font-bold text-center text-gray-800">Whiteboard Screen Share</h1>
+                        
+                        {connectionStatus === "unconnected" && (
+                            <div className="flex flex-col items-center space-y-4">
+                                 <p className="text-lg text-gray-600">IDを入力して接続してください</p>
+                                 <input
+                                    type="text"
+                                    value={manualPeerId}
+                                    onChange={(e) => setManualPeerId(e.target.value)}
+                                    className="w-full px-4 py-3 text-lg text-center text-gray-700 bg-gray-100 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                                    placeholder="相手のIDを入力"
+                                />
+                                <div className="flex w-full gap-4">
+                                    <button
+                                        onClick={() => connectToPeer(manualPeerId)}
+                                        className="w-full px-6 py-3 text-lg font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-transform transform hover:scale-105"
+                                    >
+                                        接続
+                                    </button>
+                                    <button
+                                        onClick={() => getCurrentWindow().close()}
+                                        className="w-full px-6 py-3 text-lg font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-transform transform hover:scale-105"
+                                    >
+                                        閉じる
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {connectionStatus === "connecting" && (
+                            <div className="text-center">
+                                <p className="text-xl text-gray-700">接続中...</p>
+                                <div className="mt-4 w-16 h-16 mx-auto border-4 border-blue-500 border-solid rounded-full animate-spin border-t-transparent"></div>
+                            </div>
+                        )}
+
+                        {connectionStatus === "error" && (
+                            <div className="text-center">
+                                <p className="text-xl text-red-500">接続エラーが発生しました。</p>
+                                <p className="text-gray-600 mt-2">IDを確認して再度お試しください。</p>
                                 <button
-                                    onClick={() => connectToPeer(manualPeerId)}
-                                    className="px-4 py-2 bg-blue-500 hover:bg-blue-700 text-white font-bold rounded"
+                                    onClick={() => setConnectionStatus("unconnected")}
+                                    className="mt-4 px-6 py-3 text-lg font-bold text-white bg-gray-600 rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-transform transform hover:scale-105"
                                 >
-                                    接続
-                                </button>
-                                <button
-                                    onClick={() => getCurrentWindow().close()}
-                                    className="px-4 py-2 bg-red-500 hover:bg-red-700 text-white font-bold rounded"
-                                >
-                                    閉じる
+                                    戻る
                                 </button>
                             </div>
-                        </div>
-                    )}
-                    {connectionStatus === "connecting" && <p className="text-xl">接続中...</p>}
-                    {connectionStatus === "error" && <p className="text-xl text-red-500">接続エラーが発生しました。</p>}
+                        )}
+                    </div>
                 </div>
             )}
             {/* 受信専用ホワイトボードを重ねる */}
