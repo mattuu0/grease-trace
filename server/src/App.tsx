@@ -8,7 +8,7 @@ import {
 // peerをインポート
 import { connectRemote, connectStream, getPeer } from './utils/peer';
 import { currentMonitor, getCurrentWindow, LogicalPosition, LogicalSize } from '@tauri-apps/api/window';
-import { onDeepLink, getCurrent } from '@tauri-apps/api/deep-link';
+import { getCurrent } from '@tauri-apps/plugin-deep-link';;
 
 // 画面の選択を待っているか
 let waitSelectScreen = false;
@@ -107,6 +107,7 @@ export default function App(): React.ReactElement {
     const [objects, setObjects] = useState<WhiteboardObject[]>([]);
     const [laserPos, setLaserPos] = useState<Point | null>(null);
     const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("unconnected");
+    const [manualPeerId, setManualPeerId] = useState("");
 
     // ⭐️ 追加: レーザーアノテーションの座標を保持
     const [laserAnnotationPoints, setLaserAnnotationPoints] = useState<Point[]>([]);
@@ -128,56 +129,63 @@ export default function App(): React.ReactElement {
         CurrentWindow.setPosition(new LogicalPosition(monitor?.position.x!, monitor?.position.y!));
     }
 
+    // Peer IDを使用して接続を開始する関数
+    const connectToPeer = (remotePeerId: string) => {
+        if (!remotePeerId) {
+            return;
+        }
+        console.log("🎉 Connecting to peer:", remotePeerId);
+        setConnectionStatus("connecting");
+
+        const connection = connectRemote(remotePeerId);
+
+        connection.on("open", () => {
+            console.log("🎉 接続成功!");
+            setConnectionStatus("connected");
+            ShareScreenToRemote(remotePeerId);
+        });
+
+        connection.on("data", (data: any) => {
+            console.log("🎉 データ受信!");
+            const parsedData = JSON.parse(data);
+            if (parsedData["type"] == "operation") {
+                if (parsedData["op_type"] == "delete") {
+                    setObjects((prevObjects) => prevObjects.filter((object) => object.id != parsedData["data"]["id"]));
+                } else if (parsedData["op_type"] == "update") {
+                    setObjects((prevObjects) => prevObjects.map((object) => object.id == parsedData["data"]["id"] ? parsedData["data"] : object));
+                } else if (parsedData["op_type"] == "add") {
+                    const validObjects = [parsedData.data] as WhiteboardObject[];
+                    setObjects((prevObjects) => [...prevObjects, ...validObjects]);
+                } else if (parsedData["op_type"] == "laser_move") {
+                    setLaserPos({ x: parsedData["data"]["x"], y: parsedData["data"]["y"] });
+                    setLaserAnnotationPoints(parsedData["data"]["annotation"] || []);
+                } else if (parsedData["op_type"] == "laser_click") {
+                    setLaserClickPos({ x: parsedData["data"]["x"], y: parsedData["data"]["y"], timestamp: Date.now() });
+                }
+            }
+        });
+
+        connection.on("error", (err) => {
+            console.error("🎉 接続エラー:", err);
+            setConnectionStatus("error");
+        });
+
+        connection.on("close", () => {
+            console.log("🎉 接続がクローズされました");
+            setConnectionStatus("unconnected");
+            setObjects([]);
+            setLaserPos(null);
+            setLaserAnnotationPoints([]);
+            setLaserClickPos(null);
+        });
+    };
+
     // ディープリンクを処理する関数
     const handleDeepLink = (url: string) => {
         console.log("🎉 Deep link received:", url);
         const peerIdMatch = url.match(/connect\/([^/]+)/);
         if (peerIdMatch && peerIdMatch[1]) {
-            const remotePeerId = peerIdMatch[1];
-            console.log("🎉 Connecting to peer:", remotePeerId);
-            setConnectionStatus("connecting");
-
-            const connection = connectRemote(remotePeerId);
-
-            connection.on("open", () => {
-                console.log("🎉 接続成功!");
-                setConnectionStatus("connected");
-                ShareScreenToRemote(remotePeerId);
-            });
-
-            connection.on("data", (data: any) => {
-                console.log("🎉 データ受信!");
-                const parsedData = JSON.parse(data);
-                if (parsedData["type"] == "operation") {
-                    if (parsedData["op_type"] == "delete") {
-                        setObjects((prevObjects) => prevObjects.filter((object) => object.id != parsedData["data"]["id"]));
-                    } else if (parsedData["op_type"] == "update") {
-                        setObjects((prevObjects) => prevObjects.map((object) => object.id == parsedData["data"]["id"] ? parsedData["data"] : object));
-                    } else if (parsedData["op_type"] == "add") {
-                        const validObjects = [parsedData.data] as WhiteboardObject[];
-                        setObjects((prevObjects) => [...prevObjects, ...validObjects]);
-                    } else if (parsedData["op_type"] == "laser_move") {
-                        setLaserPos({ x: parsedData["data"]["x"], y: parsedData["data"]["y"] });
-                        setLaserAnnotationPoints(parsedData["data"]["annotation"] || []);
-                    } else if (parsedData["op_type"] == "laser_click") {
-                        setLaserClickPos({ x: parsedData["data"]["x"], y: parsedData["data"]["y"], timestamp: Date.now() });
-                    }
-                }
-            });
-
-            connection.on("error", (err) => {
-                console.error("🎉 接続エラー:", err);
-                setConnectionStatus("error");
-            });
-
-            connection.on("close", () => {
-                console.log("🎉 接続がクローズされました");
-                setConnectionStatus("unconnected");
-                setObjects([]);
-                setLaserPos(null);
-                setLaserAnnotationPoints([]);
-                setLaserClickPos(null);
-            });
+            connectToPeer(peerIdMatch[1]);
         }
     };
 
@@ -200,16 +208,6 @@ export default function App(): React.ReactElement {
                 handleDeepLink(urls[0]);
             }
         });
-
-        // ディープリンク経由の接続処理 (アプリケーション実行中に受け取る場合)
-        const unlisten = onDeepLink((url) => {
-            handleDeepLink(url);
-        });
-
-        return () => {
-            unlisten.then(f => f());
-        };
-
     }, [loading]);
 
 
@@ -218,7 +216,32 @@ export default function App(): React.ReactElement {
             {connectionStatus !== "connected" && (
                 <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-gray-800 bg-opacity-90 text-white">
                     <h1 className="text-3xl font-bold mb-4">Whiteboard Screen Share</h1>
-                    {connectionStatus === "unconnected" && <p className="text-xl">クライアントからの接続を待機しています...</p>}
+                    {connectionStatus === "unconnected" && (
+                        <div className="flex flex-col items-center">
+                             <p className="text-xl mb-4">IDを入力して接続してください</p>
+                             <input
+                                type="text"
+                                value={manualPeerId}
+                                onChange={(e) => setManualPeerId(e.target.value)}
+                                className="p-2 border rounded w-80 text-center text-black mb-4"
+                                placeholder="相手のIDを入力"
+                            />
+                            <div className="flex gap-4">
+                                <button
+                                    onClick={() => connectToPeer(manualPeerId)}
+                                    className="px-4 py-2 bg-blue-500 hover:bg-blue-700 text-white font-bold rounded"
+                                >
+                                    接続
+                                </button>
+                                <button
+                                    onClick={() => getCurrentWindow().close()}
+                                    className="px-4 py-2 bg-red-500 hover:bg-red-700 text-white font-bold rounded"
+                                >
+                                    閉じる
+                                </button>
+                            </div>
+                        </div>
+                    )}
                     {connectionStatus === "connecting" && <p className="text-xl">接続中...</p>}
                     {connectionStatus === "error" && <p className="text-xl text-red-500">接続エラーが発生しました。</p>}
                 </div>
