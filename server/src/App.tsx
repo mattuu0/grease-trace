@@ -17,7 +17,7 @@ let waitSelectScreen = false;
 let currentStream: MediaStream | null = null;
 
 // 接続状態の型定義
-type ConnectionStatus = "unconnected" | "connecting" | "connected" | "error";
+type ConnectionStatus = "unconnected" | "connecting" | "connected" | "error" | "confirming";
 
 
 // 画面共有を取得する関数
@@ -108,6 +108,7 @@ export default function App(): React.ReactElement {
     const [laserPos, setLaserPos] = useState<Point | null>(null);
     const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("unconnected");
     const [manualPeerId, setManualPeerId] = useState("");
+    const [pendingPeerId, setPendingPeerId] = useState<string | null>(null);
 
     // ⭐️ 追加: レーザーアノテーションの座標を保持
     const [laserAnnotationPoints, setLaserAnnotationPoints] = useState<Point[]>([]);
@@ -127,7 +128,7 @@ export default function App(): React.ReactElement {
     }
 
     // Peer IDを使用して接続を開始する関数
-    const connectToPeer = (remotePeerId: string) => {
+    const connectToPeer = (remotePeerId: string | null) => {
         if (!remotePeerId) {
             return;
         }
@@ -164,20 +165,30 @@ export default function App(): React.ReactElement {
             }
         });
 
-        connection.on("error", (err) => {
-            console.error("🎉 接続エラー:", err);
-            setConnectionStatus("error");
-        });
-
-        connection.on("close", () => {
-            console.log("🎉 接続がクローズされました");
-            setConnectionStatus("unconnected");
+        const stopScreenShare = () => {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+                currentStream = null;
+                console.log("🎉 画面共有を停止しました");
+            }
             // 接続が切れたらマウスイベントを再度有効にする
             getCurrentWindow().setIgnoreCursorEvents(false);
             setObjects([]);
             setLaserPos(null);
             setLaserAnnotationPoints([]);
             setLaserClickPos(null);
+        };
+
+        connection.on("error", (err) => {
+            console.error("🎉 接続エラー:", err);
+            setConnectionStatus("error");
+            stopScreenShare();
+        });
+
+        connection.on("close", () => {
+            console.log("🎉 接続がクローズされました");
+            setConnectionStatus("unconnected");
+            stopScreenShare();
         });
     };
 
@@ -186,7 +197,8 @@ export default function App(): React.ReactElement {
         console.log("🎉 Deep link received:", url);
         const peerIdMatch = url.match(/connect\/([^/]+)/);
         if (peerIdMatch && peerIdMatch[1]) {
-            connectToPeer(peerIdMatch[1]);
+            setPendingPeerId(peerIdMatch[1]);
+            setConnectionStatus("confirming");
         }
     };
 
@@ -199,7 +211,7 @@ export default function App(): React.ReactElement {
 
         console.log("🎉 初期化処理実行!");
         Init();
-        
+
         // peerを初期化
         getPeer();
 
@@ -215,14 +227,14 @@ export default function App(): React.ReactElement {
     return (
         <div className="relative w-screen h-screen overflow-hidden bg-transparent">
             {connectionStatus !== "connected" && (
-                <div className="absolute inset-0 z-10 flex items-center justify-center bg-gray-200">
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-gray-200">
                     <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-lg">
                         <h1 className="text-3xl font-bold text-center text-gray-800">Whiteboard Screen Share</h1>
-                        
+
                         {connectionStatus === "unconnected" && (
                             <div className="flex flex-col items-center space-y-4">
-                                 <p className="text-lg text-gray-600">IDを入力して接続してください</p>
-                                 <input
+                                <p className="text-lg text-gray-600">IDを入力して接続してください</p>
+                                <input
                                     type="text"
                                     value={manualPeerId}
                                     onChange={(e) => setManualPeerId(e.target.value)}
@@ -237,10 +249,38 @@ export default function App(): React.ReactElement {
                                         接続
                                     </button>
                                     <button
-                                        onClick={() => getCurrentWindow().close()}
+                                        onClick={() => {
+                                            console.log("🎉 閉じる");
+                                            getCurrentWindow().close();
+                                        }}
                                         className="w-full px-6 py-3 text-lg font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-transform transform hover:scale-105"
                                     >
                                         閉じる
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {connectionStatus === "confirming" && (
+                            <div className="text-center space-y-4">
+                                <p className="text-lg text-gray-700">以下のIDから接続要求があります:</p>
+                                <p className="text-lg font-mono bg-gray-100 p-2 rounded break-all">{pendingPeerId}</p>
+                                <p className="text-lg text-gray-700">接続しますか？</p>
+                                <div className="flex w-full gap-4 pt-2">
+                                    <button
+                                        onClick={() => connectToPeer(pendingPeerId)}
+                                        className="w-full px-6 py-3 text-lg font-bold text-white bg-green-600 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-transform transform hover:scale-105"
+                                    >
+                                        承認
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setConnectionStatus("unconnected");
+                                            setPendingPeerId(null);
+                                        }}
+                                        className="w-full px-6 py-3 text-lg font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-transform transform hover:scale-105"
+                                    >
+                                        拒否
                                     </button>
                                 </div>
                             </div>
@@ -268,6 +308,8 @@ export default function App(): React.ReactElement {
                     </div>
                 </div>
             )}
+
+
             {/* 受信専用ホワイトボードを重ねる */}
             <WhiteboardReceiver
                 receivedObjects={objects}
