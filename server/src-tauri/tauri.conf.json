@@ -28,14 +28,6 @@
     ],
     "security": {
       "csp": null
-    },
-    "deepLink": {
-      "protocols": [
-        {
-          "name": "whiteboard-app",
-          "scheme": "whiteboard-app"
-        }
-      ]
     }
   },
   "bundle": {
@@ -48,5 +40,12 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["whiteboard-app"]
+      }
+    }
   }
 }
