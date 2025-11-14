@@ -28,6 +28,14 @@
     ],
     "security": {
       "csp": null
+    },
+    "deepLink": {
+      "protocols": [
+        {
+          "name": "whiteboard-app",
+          "scheme": "whiteboard-app"
+        }
+      ]
     }
   },
   "bundle": {

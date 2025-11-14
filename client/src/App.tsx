@@ -17,6 +17,9 @@ export default function App(): React.ReactElement {
     // 初期化を検知するフラグ
     const [loading, setLoading] = React.useState(true);
 
+    // 自身のPeerID
+    const [myPeerId, setMyPeerId] = React.useState<string | null>(null);
+
     // 接続中の相手のID
     const [connectedPeerId, setConnectedPeerId] = React.useState<string | null>(null);
 
@@ -32,6 +35,12 @@ export default function App(): React.ReactElement {
 
         // peerを初期化
         const mainPeer = getPeer();
+
+        // peerサーバへの接続が完了した際にpeerIDを設定
+        mainPeer.on("open", (id: string) => {
+            console.log("🎉 peer open!", id);
+            setMyPeerId(id);
+        });
 
         // peer接続
         mainPeer.on("connection", (conn: DataConnection) => {
@@ -109,6 +118,31 @@ export default function App(): React.ReactElement {
             // データを送信
             remoteConnection.send(jsonString);
         }
+    }
+
+    // 共有が開始されていない場合は待機画面を表示
+    if (!isScreenShared) {
+        const url = `whiteboard-app://connect/${myPeerId}`;
+        return (
+            <div className="flex flex-col items-center justify-center w-screen h-screen bg-gray-100">
+                <h1 className="text-2xl font-bold mb-4">接続待機中...</h1>
+                <p className="mb-2">以下のIDを共有してください:</p>
+                <input
+                    type="text"
+                    readOnly
+                    value={myPeerId || "IDを生成中..."}
+                    className="p-2 border rounded w-80 text-center"
+                />
+                {myPeerId && (
+                    <div className="mt-4">
+                        <p className="mb-2">または、以下のリンクをクリックしてもらってください:</p>
+                        <a href={url} className="text-blue-500 hover:underline break-all">
+                            {url}
+                        </a>
+                    </div>
+                )}
+            </div>
+        );
     }
 
     return (

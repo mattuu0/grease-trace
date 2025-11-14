@@ -10,7 +10,7 @@ export function getPeer() {
     // Peerインスタンスを返却
     if (!peer) {
         // Peerインスタンスを初期化
-        peer = new Peer("21061bed-4d7c-4a92-a905-2a1b884480b2",{
+        peer = new Peer({
             host: "localhost",
             port: 9000,
             path: "/myapp"
