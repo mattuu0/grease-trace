@@ -7,6 +7,9 @@ import type { DataConnection, MediaConnection } from 'peerjs';
  * デモ用メインアプリ
  */
 export default function App(): React.ReactElement {
+    // ビデオタグの参照
+    const videoRef = React.useRef<HTMLVideoElement>(null);
+
     // 画面が共有されているか
     const [isScreenShared, setIsScreenShared] = React.useState(false);
 
@@ -82,6 +85,13 @@ export default function App(): React.ReactElement {
 
     }, [loading]);
 
+    // mediaStreamが変更されたときにvideo要素に割り当てる
+    React.useEffect(() => {
+        if (videoRef.current) {
+            videoRef.current.srcObject = mediaStream;
+        }
+    }, [mediaStream]);
+
     // カスタム切断処理のコールバック
     const myCustomDisconnect = useCallback(() => {
         console.log("🔥 カスタム切断処理実行!");
@@ -152,11 +162,11 @@ export default function App(): React.ReactElement {
 
             {/* 全画面ビデオタグ (背景) */}
             <video
+                ref={videoRef} // refを再設定
                 autoPlay
                 loop
                 muted
                 playsInline
-                srcObject={mediaStream} // stateからMediaStreamをバインド
                 style={{ display: isScreenShared ? 'block' : 'none' }} // isScreenSharedで表示/非表示を切り替え
 
                 // 動画のサイズをフィット
