@@ -8,7 +8,7 @@ import {
 // peerをインポート
 import { connectRemote, connectStream, getPeer } from './utils/peer';
 import { currentMonitor, getCurrentWindow, LogicalPosition, LogicalSize } from '@tauri-apps/api/window';
-import { onDeepLink } from '@tauri-apps/api/deep-link';
+import { onDeepLink, getCurrent } from '@tauri-apps/api/deep-link';
 
 // 画面の選択を待っているか
 let waitSelectScreen = false;
@@ -128,6 +128,59 @@ export default function App(): React.ReactElement {
         CurrentWindow.setPosition(new LogicalPosition(monitor?.position.x!, monitor?.position.y!));
     }
 
+    // ディープリンクを処理する関数
+    const handleDeepLink = (url: string) => {
+        console.log("🎉 Deep link received:", url);
+        const peerIdMatch = url.match(/connect\/([^/]+)/);
+        if (peerIdMatch && peerIdMatch[1]) {
+            const remotePeerId = peerIdMatch[1];
+            console.log("🎉 Connecting to peer:", remotePeerId);
+            setConnectionStatus("connecting");
+
+            const connection = connectRemote(remotePeerId);
+
+            connection.on("open", () => {
+                console.log("🎉 接続成功!");
+                setConnectionStatus("connected");
+                ShareScreenToRemote(remotePeerId);
+            });
+
+            connection.on("data", (data: any) => {
+                console.log("🎉 データ受信!");
+                const parsedData = JSON.parse(data);
+                if (parsedData["type"] == "operation") {
+                    if (parsedData["op_type"] == "delete") {
+                        setObjects((prevObjects) => prevObjects.filter((object) => object.id != parsedData["data"]["id"]));
+                    } else if (parsedData["op_type"] == "update") {
+                        setObjects((prevObjects) => prevObjects.map((object) => object.id == parsedData["data"]["id"] ? parsedData["data"] : object));
+                    } else if (parsedData["op_type"] == "add") {
+                        const validObjects = [parsedData.data] as WhiteboardObject[];
+                        setObjects((prevObjects) => [...prevObjects, ...validObjects]);
+                    } else if (parsedData["op_type"] == "laser_move") {
+                        setLaserPos({ x: parsedData["data"]["x"], y: parsedData["data"]["y"] });
+                        setLaserAnnotationPoints(parsedData["data"]["annotation"] || []);
+                    } else if (parsedData["op_type"] == "laser_click") {
+                        setLaserClickPos({ x: parsedData["data"]["x"], y: parsedData["data"]["y"], timestamp: Date.now() });
+                    }
+                }
+            });
+
+            connection.on("error", (err) => {
+                console.error("🎉 接続エラー:", err);
+                setConnectionStatus("error");
+            });
+
+            connection.on("close", () => {
+                console.log("🎉 接続がクローズされました");
+                setConnectionStatus("unconnected");
+                setObjects([]);
+                setLaserPos(null);
+                setLaserAnnotationPoints([]);
+                setLaserClickPos(null);
+            });
+        }
+    };
+
     // コンポーネントの初期化時にのみサービスを呼び出します
     useEffect(() => {
         if (!loading) {
@@ -141,57 +194,16 @@ export default function App(): React.ReactElement {
         // peerを初期化
         getPeer();
 
-        // ディープリンク経由の接続処理
-        const unlisten = onDeepLink((url) => {
-            console.log("🎉 Deep link received:", url);
-            const peerIdMatch = url.match(/connect\/([^/]+)/);
-            if (peerIdMatch && peerIdMatch[1]) {
-                const remotePeerId = peerIdMatch[1];
-                console.log("🎉 Connecting to peer:", remotePeerId);
-                setConnectionStatus("connecting");
-
-                const connection = connectRemote(remotePeerId);
-
-                connection.on("open", () => {
-                    console.log("🎉 接続成功!");
-                    setConnectionStatus("connected");
-                    ShareScreenToRemote(remotePeerId);
-                });
-
-                connection.on("data", (data: any) => {
-                    console.log("🎉 データ受信!");
-                    const parsedData = JSON.parse(data);
-                    if (parsedData["type"] == "operation") {
-                        if (parsedData["op_type"] == "delete") {
-                            setObjects((prevObjects) => prevObjects.filter((object) => object.id != parsedData["data"]["id"]));
-                        } else if (parsedData["op_type"] == "update") {
-                            setObjects((prevObjects) => prevObjects.map((object) => object.id == parsedData["data"]["id"] ? parsedData["data"] : object));
-                        } else if (parsedData["op_type"] == "add") {
-                            const validObjects = [parsedData.data] as WhiteboardObject[];
-                            setObjects((prevObjects) => [...prevObjects, ...validObjects]);
-                        } else if (parsedData["op_type"] == "laser_move") {
-                            setLaserPos({ x: parsedData["data"]["x"], y: parsedData["data"]["y"] });
-                            setLaserAnnotationPoints(parsedData["data"]["annotation"] || []);
-                        } else if (parsedData["op_type"] == "laser_click") {
-                            setLaserClickPos({ x: parsedData["data"]["x"], y: parsedData["data"]["y"], timestamp: Date.now() });
-                        }
-                    }
-                });
-
-                connection.on("error", (err) => {
-                    console.error("🎉 接続エラー:", err);
-                    setConnectionStatus("error");
-                });
-
-                connection.on("close", () => {
-                    console.log("🎉 接続がクローズされました");
-                    setConnectionStatus("unconnected");
-                    setObjects([]);
-                    setLaserPos(null);
-                    setLaserAnnotationPoints([]);
-                    setLaserClickPos(null);
-                });
+        // アプリケーション起動時のディープリンクを処理
+        getCurrent().then((urls) => {
+            if (urls && urls.length > 0) {
+                handleDeepLink(urls[0]);
             }
+        });
+
+        // ディープリンク経由の接続処理 (アプリケーション実行中に受け取る場合)
+        const unlisten = onDeepLink((url) => {
+            handleDeepLink(url);
         });
 
         return () => {
