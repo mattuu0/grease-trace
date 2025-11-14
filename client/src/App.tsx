@@ -7,11 +7,11 @@ import type { DataConnection, MediaConnection } from 'peerjs';
  * デモ用メインアプリ
  */
 export default function App(): React.ReactElement {
-    // ビデオタグの参照
-    const videoRef = React.useRef<HTMLVideoElement>(null);
-
     // 画面が共有されているか
     const [isScreenShared, setIsScreenShared] = React.useState(false);
+
+    // 受信したMediaStream
+    const [mediaStream, setMediaStream] = React.useState<MediaStream | null>(null);
 
     // 初期化処理
     // 初期化を検知するフラグ
@@ -60,8 +60,8 @@ export default function App(): React.ReactElement {
             call.on("stream", (stream: MediaStream) => {
                 console.log("🎉 mediacall stream!");
 
-                // videoタグにストリームを設定
-                videoRef.current!.srcObject = stream;
+                // MediaStreamをstateに設定
+                setMediaStream(stream);
 
                 // 画面を共有している
                 setIsScreenShared(true);
@@ -73,6 +73,7 @@ export default function App(): React.ReactElement {
             call.on("close", () => {
                 console.log("🎉 mediacall close!");
                 setIsScreenShared(false);
+                setMediaStream(null); // ストリームをクリア
             })
 
             console.log("🎉 mediacall!");
@@ -155,12 +156,12 @@ export default function App(): React.ReactElement {
                 loop
                 muted
                 playsInline
+                srcObject={mediaStream} // stateからMediaStreamをバインド
+                style={{ display: isScreenShared ? 'block' : 'none' }} // isScreenSharedで表示/非表示を切り替え
 
                 // 動画のサイズをフィット
                 // 絶対配置で全画面に広げ、オブジェクトフィットでカバー
                 className="absolute inset-0 w-full h-full object-fill"
-                // ビデオタグの参照をセット
-                ref={videoRef}
             />
 
             {/* ホワイトボード (ビデオの上に絶対配置で重ねる) */}
