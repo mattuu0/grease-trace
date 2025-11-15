@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "server",
+  "productName": "ScreenAssister",
   "version": "0.1.0",
-  "identifier": "com.admin.server",
+  "identifier": "com.mattuu0.ScreenAssister",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "server",
+        "title": "ScreenAssister",
         "transparent": true,
         "x": 0,
         "y": 0,
@@ -39,7 +39,23 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "allowDowngrades": true,
+      "certificateThumbprint": null,
+      "digestAlgorithm": null,
+      "nsis": {
+        "languages": ["Japanese"]
+      },
+      "signCommand": null,
+      "timestampUrl": null,
+      "tsp": false,
+      "webviewInstallMode": {
+        "silent": true,
+        "type": "downloadBootstrapper"
+      },
+      "wix": null
+    }
   },
   "plugins": {
     "deep-link": {

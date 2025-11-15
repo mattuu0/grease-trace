@@ -269,8 +269,9 @@ const calculateResizedObject = (startObj: WhiteboardObject, dx: number, dy: numb
 
         if (startShapeObj.type === OBJECT_TYPES.TEXT) {
             // (fontSize の計算ロジック)
-            const startW_norm = 'width' in startShapeObj ? startShapeObj.width : startShapeObj.rx * 2;
-            const startH_norm = 'height' in startShapeObj ? startShapeObj.height : startShapeObj.ry * 2;
+
+            const startW_norm = 'width' in startShapeObj ? startShapeObj.width :0;
+            const startH_norm = 'height' in startShapeObj ? startShapeObj.height : 0;
             const ratio = (startW_norm * startH_norm === 0) ? 1 : Math.sqrt((newW * newH) / (startW_norm * startH_norm));
             let newFontSize = startShapeObj.fontSize * ratio;
             newFontSize = Math.max(5, newFontSize);
