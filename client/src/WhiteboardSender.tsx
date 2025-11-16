@@ -84,7 +84,7 @@ type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
  * WhiteboardSenderに渡すPropsの定義 (更新)
  */
 export interface WhiteboardSenderProps {
-    videoRef: React.RefObject<HTMLVideoElement>;
+    videoRef: React.RefObject<HTMLVideoElement | null>;
     initialToolLockState?: boolean;
     onDisconnectCallback?: () => void;
     // ⭐️ 描画データが更新されたときに呼ばれるコールバックを追加
@@ -1188,6 +1188,8 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
 
         } else if (isDrawing && startPos) {
             const pos = getNormalizedPosition(e);
+            if (!pos) return; // ⭐️ pos が null の場合はここで処理を中断
+
             let finalPoints = currentPoints;
             if (tool !== 'pen') {
                 finalPoints = [startPos, pos];
