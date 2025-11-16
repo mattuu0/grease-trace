@@ -7,6 +7,9 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: write
+
 jobs:
   build-client:
     runs-on: ubuntu-latest
@@ -63,7 +66,7 @@ jobs:
         working-directory: ./server
 
       - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2 # バージョンを v2 に更新
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
@@ -71,4 +74,3 @@ jobs:
             ./server/src-tauri/target/release/*.exe # Windows
             ./server/src-tauri/target/release/*.dmg # macOS
             ./server/src-tauri/target/release/*.app # macOS
-          token: ${{ secrets.GITHUB_TOKEN }}
