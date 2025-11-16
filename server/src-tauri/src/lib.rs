@@ -15,7 +15,6 @@ pub fn run() {
     builder = builder.plugin(tauri_plugin_deep_link::init());
 
     builder
-        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             // 開発時だけdevtoolsを表示する。

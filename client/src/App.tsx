@@ -13,9 +13,15 @@ export default function App(): React.ReactElement {
     // 画面が共有されているか
     const [isScreenShared, setIsScreenShared] = React.useState(false);
 
+    // 受信したMediaStream
+    const [mediaStream, setMediaStream] = React.useState<MediaStream | null>(null);
+
     // 初期化処理
     // 初期化を検知するフラグ
     const [loading, setLoading] = React.useState(true);
+
+    // 自身のPeerID
+    const [myPeerId, setMyPeerId] = React.useState<string | null>(null);
 
     // 接続中の相手のID
     const [connectedPeerId, setConnectedPeerId] = React.useState<string | null>(null);
@@ -32,6 +38,12 @@ export default function App(): React.ReactElement {
 
         // peerを初期化
         const mainPeer = getPeer();
+
+        // peerサーバへの接続が完了した際にpeerIDを設定
+        mainPeer.on("open", (id: string) => {
+            console.log("🎉 peer open!", id);
+            setMyPeerId(id);
+        });
 
         // peer接続
         mainPeer.on("connection", (conn: DataConnection) => {
@@ -51,8 +63,8 @@ export default function App(): React.ReactElement {
             call.on("stream", (stream: MediaStream) => {
                 console.log("🎉 mediacall stream!");
 
-                // videoタグにストリームを設定
-                videoRef.current!.srcObject = stream;
+                // MediaStreamをstateに設定
+                setMediaStream(stream);
 
                 // 画面を共有している
                 setIsScreenShared(true);
@@ -64,6 +76,7 @@ export default function App(): React.ReactElement {
             call.on("close", () => {
                 console.log("🎉 mediacall close!");
                 setIsScreenShared(false);
+                setMediaStream(null); // ストリームをクリア
             })
 
             console.log("🎉 mediacall!");
@@ -72,10 +85,20 @@ export default function App(): React.ReactElement {
 
     }, [loading]);
 
+    // mediaStreamが変更されたときにvideo要素に割り当てる
+    React.useEffect(() => {
+        if (videoRef.current) {
+            videoRef.current.srcObject = mediaStream;
+        }
+    }, [mediaStream]);
+
     // カスタム切断処理のコールバック
     const myCustomDisconnect = useCallback(() => {
         console.log("🔥 カスタム切断処理実行!");
-        alert("🎉 カスタム切断処理が実行されました！");
+        // alert("🎉 カスタム切断処理が実行されました！");
+
+        // リロードする
+        window.location.reload();
     }, []);
 
     const initialSettings = useMemo(() => ({
@@ -111,26 +134,52 @@ export default function App(): React.ReactElement {
         }
     }
 
+    // 共有が開始されていない場合は待機画面を表示
+    if (!isScreenShared) {
+        const url = `whiteboard-app://connect/${myPeerId}`;
+        return (
+            <div className="flex flex-col items-center justify-center w-screen h-screen bg-gray-100">
+                <h1 className="text-2xl font-bold mb-4">接続待機中...</h1>
+                <p className="mb-2">以下のIDを共有してください:</p>
+                <input
+                    type="text"
+                    readOnly
+                    value={myPeerId || "IDを生成中..."}
+                    className="p-2 border rounded w-80 text-center"
+                />
+                {myPeerId && (
+                    <div className="mt-4">
+                        <p className="mb-2">または、以下のリンクをクリックしてもらってください:</p>
+                        <a href={url} className="text-blue-500 hover:underline break-all">
+                            {url}
+                        </a>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
     return (
         // 親コンテナを相対位置、全画面に設定
         <div className="relative w-screen h-screen overflow-hidden">
 
             {/* 全画面ビデオタグ (背景) */}
             <video
+                ref={videoRef} // refを再設定
                 autoPlay
                 loop
                 muted
                 playsInline
+                style={{ display: isScreenShared ? 'block' : 'none' }} // isScreenSharedで表示/非表示を切り替え
 
                 // 動画のサイズをフィット
                 // 絶対配置で全画面に広げ、オブジェクトフィットでカバー
                 className="absolute inset-0 w-full h-full object-fill"
-                // ビデオタグの参照をセット
-                ref={videoRef}
             />
 
             {/* ホワイトボード (ビデオの上に絶対配置で重ねる) */}
             <WhiteboardSender
+                videoRef={videoRef} // ⭐️ 追加
                 initialToolLockState={initialSettings.initialToolLockState}
                 onDisconnectCallback={initialSettings.onDisconnectCallback}
                 onUpdateCallback={updateCallback}

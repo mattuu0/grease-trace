@@ -84,6 +84,7 @@ type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
  * WhiteboardSenderに渡すPropsの定義 (更新)
  */
 export interface WhiteboardSenderProps {
+    videoRef: React.RefObject<HTMLVideoElement | null>;
     initialToolLockState?: boolean;
     onDisconnectCallback?: () => void;
     // ⭐️ 描画データが更新されたときに呼ばれるコールバックを追加
@@ -269,8 +270,9 @@ const calculateResizedObject = (startObj: WhiteboardObject, dx: number, dy: numb
 
         if (startShapeObj.type === OBJECT_TYPES.TEXT) {
             // (fontSize の計算ロジック)
-            const startW_norm = 'width' in startShapeObj ? startShapeObj.width : startShapeObj.rx * 2;
-            const startH_norm = 'height' in startShapeObj ? startShapeObj.height : startShapeObj.ry * 2;
+
+            const startW_norm = 'width' in startShapeObj ? startShapeObj.width :0;
+            const startH_norm = 'height' in startShapeObj ? startShapeObj.height : 0;
             const ratio = (startW_norm * startH_norm === 0) ? 1 : Math.sqrt((newW * newH) / (startW_norm * startH_norm));
             let newFontSize = startShapeObj.fontSize * ratio;
             newFontSize = Math.max(5, newFontSize);
@@ -629,6 +631,7 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize, isSelected
  * メインホワイトボードコンポーネント（送信側）
  */
 export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
+    videoRef, // ⭐️ 追加
     initialToolLockState = false,
     onDisconnectCallback,
     onUpdateCallback // ⭐️ 新しいProp
@@ -783,19 +786,57 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
         }
     }, [onDisconnectCallback]);
 
-    /**
-     * 正規化座標を取得 (修正)
-     */
-    const getNormalizedPosition = useCallback((e: React.MouseEvent<SVGSVGElement>): Point => {
-        if (!canvasRef.current) return { x: 0, y: 0 };
-        const rect = canvasRef.current.getBoundingClientRect();
+    const getNormalizedPosition = useCallback((e: React.MouseEvent<SVGSVGElement>): Point | null => {
+        const video = videoRef.current;
+        // video要素またはその解像度がなければ計算不可
+        if (!video || !video.videoWidth || !video.videoHeight) return null;
 
-        // ⭐️ Y座標の正規化を height 基準に戻す
-        return {
-            x: normalize(e.clientX - rect.left, canvasSize.width),
-            y: normalize(e.clientY - rect.top, canvasSize.height)
-        };
-    }, [canvasSize]); // ⭐️ 依存配列から aspectRatio を削除
+        const videoRect = video.getBoundingClientRect();
+
+        // ビデオの本来の解像度とアスペクト比
+        const videoNativeWidth = video.videoWidth;
+        const videoNativeHeight = video.videoHeight;
+        const videoAspectRatio = videoNativeWidth / videoNativeHeight;
+
+        // video要素の表示コンテナのサイズとアスペクト比
+        const containerWidth = video.clientWidth;
+        const containerHeight = video.clientHeight;
+        const containerAspectRatio = containerWidth / containerHeight;
+
+        let renderWidth = containerWidth;
+        let renderHeight = containerHeight;
+        let offsetX = 0;
+        let offsetY = 0;
+
+        // アスペクト比を比較して、ビデオが実際に描画されている領域を計算
+        // (CSSの object-fit: contain と同じ挙動をシミュレート)
+        if (containerAspectRatio > videoAspectRatio) {
+            // コンテナがビデオより横長の場合 (上下に余白)
+            renderWidth = containerHeight * videoAspectRatio;
+            offsetX = (containerWidth - renderWidth) / 2;
+        } else {
+            // コンテナがビデオより縦長の場合 (左右に余白)
+            renderHeight = containerWidth / videoAspectRatio;
+            offsetY = (containerHeight - renderHeight) / 2;
+        }
+
+        // マウスのクリック座標 (video要素の左上からの相対位置)
+        const mouseX = e.clientX - videoRect.left;
+        const mouseY = e.clientY - videoRect.top;
+
+        // 描画領域内での相対座標を計算
+        const relativeX = mouseX - offsetX;
+        const relativeY = mouseY - offsetY;
+
+        // 描画領域外のクリックは座標を 0.0-1.0 の範囲に収める（クランプ）
+        const normalizedX = Math.max(0, Math.min(1, relativeX / renderWidth));
+        const normalizedY = Math.max(0, Math.min(1, relativeY / renderHeight));
+
+        // 計算結果が不正な場合はnullを返す
+        if (isNaN(normalizedX) || isNaN(normalizedY)) return null;
+
+        return { x: normalizedX, y: normalizedY };
+    }, [videoRef]); // ⭐️ 依存配列を videoRef に変更
 
     /**
      * ポイントがオブジェクト内にあるか判定 (修正)
@@ -894,11 +935,13 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
     const handleMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
         if (editingId) return;
 
-        const pos = getNormalizedPosition(e);
         const { clientX, clientY } = e;
         const rect = canvasRef.current!.getBoundingClientRect();
         const absX = clientX - rect.left;
         const absY = clientY - rect.top;
+
+        const pos = getNormalizedPosition(e);
+        if (!pos) return; // ⭐️ 追加: 座標が取得できなければ何もしない
 
         if (tool === 'select') {
 
@@ -1002,6 +1045,7 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
         if (editingId) return;
 
         const pos = getNormalizedPosition(e);
+        if (!pos) return; // ⭐️ 追加: 座標が取得できなければ何もしない
 
         if (canvasRef.current) {
             const rect = canvasRef.current.getBoundingClientRect();
@@ -1125,9 +1169,12 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
             // setLaserAnnotationPoints([]); // 停止時に `laser_move` で空配列を送るため、ここでは維持
 
             // 最後の座標とアノテーションを送信し、その後停止を通知
+            const finalPos = getNormalizedPosition(e);
+            if (!finalPos) return; // ⭐️ nullチェックを追加
+
             onUpdateCallback?.(emitOperation('laser_move', {
-                x: getNormalizedPosition(e).x,
-                y: getNormalizedPosition(e).y,
+                x: finalPos.x,
+                y: finalPos.y,
                 annotation: laserAnnotationPoints, // 最後に描画した全座標
             }));
 
@@ -1141,6 +1188,8 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
 
         } else if (isDrawing && startPos) {
             const pos = getNormalizedPosition(e);
+            if (!pos) return; // ⭐️ pos が null の場合はここで処理を中断
+
             let finalPoints = currentPoints;
             if (tool !== 'pen') {
                 finalPoints = [startPos, pos];
