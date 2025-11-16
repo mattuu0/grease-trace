@@ -179,6 +179,7 @@ export default function App(): React.ReactElement {
 
             {/* ホワイトボード (ビデオの上に絶対配置で重ねる) */}
             <WhiteboardSender
+                videoRef={videoRef} // ⭐️ 追加
                 initialToolLockState={initialSettings.initialToolLockState}
                 onDisconnectCallback={initialSettings.onDisconnectCallback}
                 onUpdateCallback={updateCallback}
