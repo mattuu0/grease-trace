@@ -1,0 +1,74 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - main
+  release:
+    types: [published]
+
+jobs:
+  build-client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # プロジェクトに合わせて適切なバージョンを指定
+
+      - name: Install dependencies (client)
+        run: npm install
+        working-directory: ./client
+
+      - name: Build client
+        run: npm install && npm run build
+        working-directory: ./client
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./docs # docs ディレクトリをアップロード
+
+  build-server:
+    needs: build-client
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest, windows-latest] # macOS と Windows のみ
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies (server)
+        run: npm install
+        working-directory: ./server
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Install Tauri CLI
+        run: npm install -g @tauri-apps/cli@2
+
+      - name: Build Tauri app
+        run: npm run tauri build
+        working-directory: ./server
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            ./server/src-tauri/target/release/*.msi # Windows
+            ./server/src-tauri/target/release/*.exe # Windows
+            ./server/src-tauri/target/release/*.dmg # macOS
+            ./server/src-tauri/target/release/*.app # macOS
+          token: ${{ secrets.GITHUB_TOKEN }}
