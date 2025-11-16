@@ -7,7 +7,7 @@ import {
 
 // peerをインポート
 import { connectRemote, connectStream, getPeer } from './utils/peer';
-import { currentMonitor, getCurrentWindow, LogicalPosition, LogicalSize } from '@tauri-apps/api/window';
+import { availableMonitors, getCurrentWindow, LogicalPosition, LogicalSize } from '@tauri-apps/api/window';
 import { getCurrent } from '@tauri-apps/plugin-deep-link';;
 
 // 画面の選択を待っているか
@@ -19,6 +19,36 @@ let currentStream: MediaStream | null = null;
 // 接続状態の型定義
 type ConnectionStatus = "unconnected" | "connecting" | "connected" | "error" | "confirming";
 
+/**
+ * "screen:0:0" のような文字列を解析して、モニター番号を取得します。
+ * モニター番号は、2番目のコロンの前の数値部分と想定します。
+ * * @param screenString 解析対象の文字列 (例: "screen:0:0")
+ * @returns モニター番号 (数値)。解析できない場合は null を返します。
+ */
+function getMonitorNumber(screenString: string): number | null {
+    // 1. 文字列をコロン (":") で分割します。
+    // 例: "screen:0:0" -> ["screen", "0", "0"]
+    const parts = screenString.split(':');
+
+    // 2. 配列の長さが3以上で、モニター番号に相当する部分 (インデックス1) が存在するかチェックします。
+    // インデックス0: "screen"
+    // インデックス1: "0" (モニター番号)
+    // インデックス2: "0" (x座標など)
+    if (parts.length > 1) {
+        // 3. インデックス1の文字列を数値に変換します。
+        const monitorNumberStr = parts[1];
+        const monitorNumber = parseInt(monitorNumberStr, 10);
+
+        // 4. 数値に正常に変換されたかチェックし、結果を返します。
+        // isNaN(monitorNumber) は、parseIntが失敗した場合 (例: "screen:A:0") に true を返します。
+        if (!isNaN(monitorNumber)) {
+            return monitorNumber;
+        }
+    }
+
+    // 解析に失敗した場合
+    return null;
+}
 
 // 画面共有を取得する関数
 async function ShareScreen() {
@@ -47,6 +77,23 @@ async function ShareScreen() {
             audio: false
         });
 
+        // トラックの情報取得
+        const videoTrack = stream.getVideoTracks()[0];
+        const settings = videoTrack.getSettings();
+
+        console.log("🎉 トラック情報:", settings);
+
+        // モニター番号取得
+        const monitorIndex = getMonitorNumber(settings.deviceId!);
+
+        console.log("🎉 モニター番号:", monitorIndex);
+
+        // ウィンドウを移動
+        if (monitorIndex != null) {
+            // モニターに移動
+            await moveToMonitor(monitorIndex!);
+        }
+
         // マウスを除外する
         getCurrentWindow().setIgnoreCursorEvents(true);
 
@@ -60,7 +107,6 @@ async function ShareScreen() {
         stream.getVideoTracks()[0].addEventListener("ended", () => {
             currentStream = null;
         });
-
         return stream;
     } catch (error) {
         // not allowedの場合
@@ -84,6 +130,26 @@ async function ShareScreen() {
     }
 }
 
+
+// moveToMonitor
+// 指定した番号のモニターに移動する
+async function moveToMonitor(monitorNumber: number) {
+    // ウィンドウを取得
+    const CurrentWindow = getCurrentWindow();
+
+    // モニター情報を取得
+    const monitors = await availableMonitors();
+    const monitor = monitors[monitorNumber];
+
+    if (!monitor) {
+        return;
+    }
+
+    // ウィンドウを移動
+    CurrentWindow.setSize(new LogicalSize(monitor?.size.width!, monitor?.size.height!));
+    CurrentWindow.setPosition(new LogicalPosition(monitor?.position.x!, monitor?.position.y!));
+}
+
 function ShareScreenToRemote(remotePeerId: string) {
 
     // 画面共有を取得
@@ -98,7 +164,18 @@ function ShareScreenToRemote(remotePeerId: string) {
         stream.getVideoTracks()[0].addEventListener("ended", () => {
             // 終了したとき再度要求する
             ShareScreenToRemote(remotePeerId);
-        })
+        });
+
+        // トラックの情報取得
+        const videoTrack = stream.getVideoTracks()[0];
+        const settings = videoTrack.getSettings();
+
+        // モニター番号取得
+        const monitorIndex = getMonitorNumber(settings.deviceId!);
+        // ウィンドウを移動
+        if (monitorIndex) {
+            moveToMonitor(monitorIndex!);
+        }
     });
 }
 
@@ -119,12 +196,10 @@ export default function App(): React.ReactElement {
     // 初期化を検知するフラグ
     const [loading, setLoading] = React.useState(true);
 
+
     async function Init() {
-        // ウィンドウを取得
-        const CurrentWindow = getCurrentWindow();
-        const monitor = await currentMonitor();
-        CurrentWindow.setSize(new LogicalSize(monitor?.size.width!, monitor?.size.height!));
-        CurrentWindow.setPosition(new LogicalPosition(monitor?.position.x!, monitor?.position.y!));
+        // デスクトップ0番に移動
+        await moveToMonitor(0);
     }
 
     // Peer IDを使用して接続を開始する関数

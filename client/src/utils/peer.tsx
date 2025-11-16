@@ -10,7 +10,11 @@ export function getPeer() {
     // Peerインスタンスを返却
     if (!peer) {
         // Peerインスタンスを初期化
-        peer = new Peer(crypto.randomUUID());
+        peer = new Peer(crypto.randomUUID(),{
+            host: "peerjs.mattuu.com",
+            path: "/",
+            secure: true
+        });
     }
 
     // Peerインスタンスを返却

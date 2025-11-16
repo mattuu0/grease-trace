@@ -95,7 +95,10 @@ export default function App(): React.ReactElement {
     // カスタム切断処理のコールバック
     const myCustomDisconnect = useCallback(() => {
         console.log("🔥 カスタム切断処理実行!");
-        alert("🎉 カスタム切断処理が実行されました！");
+        // alert("🎉 カスタム切断処理が実行されました！");
+
+        // リロードする
+        window.location.reload();
     }, []);
 
     const initialSettings = useMemo(() => ({

@@ -23,7 +23,7 @@
         "minimizable": false,
         "resizable": false,
         "shadow": false,
-        "contentProtected": true
+        "contentProtected": false
       }
     ],
     "security": {
