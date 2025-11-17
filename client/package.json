@@ -17,6 +17,7 @@
     "peerjs": "^1.5.5",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "simple-peer": "^9.11.1",
     "tailwindcss": "^4.1.17"
   },
   "devDependencies": {
@@ -24,6 +25,7 @@
     "@types/node": "^24.10.0",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
+    "@types/simple-peer": "^9.11.9",
     "@vitejs/plugin-react": "^5.1.0",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^5.2.0",

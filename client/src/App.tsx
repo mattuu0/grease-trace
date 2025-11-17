@@ -1,10 +1,15 @@
-import React, { useCallback, useMemo } from 'react';
-import { WhiteboardSender } from './WhiteboardSender'; // WhiteboardSenderをインポート
-import {getPeer,getPeerConnection,setPeerConnection} from "./utils/peer"
-import type { DataConnection, MediaConnection } from 'peerjs';
+/**
+ * ファイル名: App.tsx
+ * 説明: アダプターパターンを使用したメインアプリケーション
+ */
+
+import React, { useCallback, useMemo, useEffect } from 'react';
+import { WhiteboardSender } from './WhiteboardSender';
+import { getSimplePeerAdapter } from './connect/simple-peer-adapter';
+import type { IP2PDataConnection } from './connect/p2p-adapter-interface';
 
 /**
- * デモ用メインアプリ
+ * デモ用メインアプリ（アダプターパターン使用）
  */
 export default function App(): React.ReactElement {
     // ビデオタグの参照
@@ -16,77 +21,82 @@ export default function App(): React.ReactElement {
     // 受信したMediaStream
     const [mediaStream, setMediaStream] = React.useState<MediaStream | null>(null);
 
-    // 初期化処理
-    // 初期化を検知するフラグ
-    const [loading, setLoading] = React.useState(true);
-
     // 自身のPeerID
     const [myPeerId, setMyPeerId] = React.useState<string | null>(null);
 
     // 接続中の相手のID
     const [connectedPeerId, setConnectedPeerId] = React.useState<string | null>(null);
 
-    // コンポーネントの初期化時にのみサービスを呼び出します
-    React.useEffect(() => {
-        // すでに初期化されていた場合は処理を抜けます
-        if (!loading) {
-            return;
-        }
+    // データコネクション
+    const [dataConnection, setDataConnection] = React.useState<IP2PDataConnection | null>(null);
 
-        // 初期化済みのフラグを立てます
-        setLoading(false);
+    // P2Pアダプター
+    const adapter = useMemo(() => getSimplePeerAdapter(), []);
 
-        // peerを初期化
-        const mainPeer = getPeer();
+    // 初期化処理
+    useEffect(() => {
+        let mounted = true;
 
-        // peerサーバへの接続が完了した際にpeerIDを設定
-        mainPeer.on("open", (id: string) => {
-            console.log("🎉 peer open!", id);
-            setMyPeerId(id);
-        });
+        const init = async () => {
+            try {
+                // 初期化完了（接続識別子返却）
+                const peerId = await adapter.initialize();
+                
+                if (mounted) {
+                    console.log('🎉 Adapter initialized!', peerId);
+                    setMyPeerId(peerId);
+                }
 
-        // peer接続
-        mainPeer.on("connection", (conn: DataConnection) => {
-            console.log("🎉 peer接続成功!");
+                // データコネクション接続イベント
+                adapter.onDataConnectionIncoming((connection) => {
+                    if (!mounted) return;
+                    
+                    console.log('🎉 Data connection incoming!', connection.remotePeerId);
+                    setConnectedPeerId(connection.remotePeerId);
+                    setDataConnection(connection);
+                });
 
-            console.log(conn.peer);
+                // 受信イベント呼び出し
+                adapter.onDataReceived((remotePeerId, data) => {
+                    console.log('📩 Data received from', remotePeerId, ':', data);
+                });
 
-            // 接続中の相手のID
-            setConnectedPeerId(conn.peer);
-            
-            // 接続情報を保存
-            setPeerConnection(conn.peer, conn);
-        });
+                // MediaStream受信イベント
+                adapter.onMediaStreamReceived((remotePeerId, stream) => {
+                    if (!mounted) return;
+                    
+                    console.log('🎥 MediaStream received from', remotePeerId);
+                    setMediaStream(stream);
+                    setIsScreenShared(true);
+                    setConnectedPeerId(remotePeerId);
+                });
 
-        // mediacall が来た時の処理
-        mainPeer.on("call", (call: MediaConnection) => {
-            call.on("stream", (stream: MediaStream) => {
-                console.log("🎉 mediacall stream!");
+                // 切断イベント
+                adapter.onDisconnected((remotePeerId) => {
+                    console.log('👋 Disconnected from', remotePeerId);
+                    
+                    if (remotePeerId === connectedPeerId) {
+                        setIsScreenShared(false);
+                        setMediaStream(null);
+                        setConnectedPeerId(null);
+                        setDataConnection(null);
+                    }
+                });
 
-                // MediaStreamをstateに設定
-                setMediaStream(stream);
+            } catch (error) {
+                console.error('❌ Initialization error:', error);
+            }
+        };
 
-                // 画面を共有している
-                setIsScreenShared(true);
+        init();
 
-                // 接続中の相手のID
-                setConnectedPeerId(call.peer);
-            })
-
-            call.on("close", () => {
-                console.log("🎉 mediacall close!");
-                setIsScreenShared(false);
-                setMediaStream(null); // ストリームをクリア
-            })
-
-            console.log("🎉 mediacall!");
-            call.answer();
-        });
-
-    }, [loading]);
+        return () => {
+            mounted = false;
+        };
+    }, [adapter]);
 
     // mediaStreamが変更されたときにvideo要素に割り当てる
-    React.useEffect(() => {
+    useEffect(() => {
         if (videoRef.current) {
             videoRef.current.srcObject = mediaStream;
         }
@@ -95,9 +105,6 @@ export default function App(): React.ReactElement {
     // カスタム切断処理のコールバック
     const myCustomDisconnect = useCallback(() => {
         console.log("🔥 カスタム切断処理実行!");
-        // alert("🎉 カスタム切断処理が実行されました！");
-
-        // リロードする
         window.location.reload();
     }, []);
 
@@ -106,33 +113,22 @@ export default function App(): React.ReactElement {
         onDisconnectCallback: myCustomDisconnect
     }), [myCustomDisconnect]);
 
-    const updateCallback = (jsonString: string) => {
+    // データ送信関数
+    const updateCallback = useCallback((jsonString: string) => {
         console.log("🎉 更新コールバック実行!");
         console.log(jsonString);
 
         // 画面が共有されている場合データを送信する
-        if (isScreenShared) {
-            console.log("🎉 画面が共有されているのでデータを送信します!");
-
-            // 接続中の相手のIDがない場合は処理を抜けます
-            if (!connectedPeerId) {
-                console.log("🎉 接続中の相手のIDがありません!");
-                return;
+        if (isScreenShared && dataConnection && dataConnection.isOpen) {
+            console.log("📤 送信中...");
+            
+            try {
+                dataConnection.send(jsonString);
+            } catch (error) {
+                console.error("❌ 送信エラー:", error);
             }
-
-            // 相手の接続情報を取得
-            const remoteConnection = getPeerConnection(connectedPeerId);
-
-            // 相手の接続情報がない場合は処理を抜けます
-            if (!remoteConnection) {
-                console.log("🎉 相手の接続情報がありません!");
-                return;
-            }
-
-            // データを送信
-            remoteConnection.send(jsonString);
         }
-    }
+    }, [isScreenShared, dataConnection]);
 
     // 共有が開始されていない場合は待機画面を表示
     if (!isScreenShared) {
@@ -160,26 +156,21 @@ export default function App(): React.ReactElement {
     }
 
     return (
-        // 親コンテナを相対位置、全画面に設定
         <div className="relative w-screen h-screen overflow-hidden">
-
             {/* 全画面ビデオタグ (背景) */}
             <video
-                ref={videoRef} // refを再設定
+                ref={videoRef}
                 autoPlay
                 loop
                 muted
                 playsInline
-                style={{ display: isScreenShared ? 'block' : 'none' }} // isScreenSharedで表示/非表示を切り替え
-
-                // 動画のサイズをフィット
-                // 絶対配置で全画面に広げ、オブジェクトフィットでカバー
+                style={{ display: isScreenShared ? 'block' : 'none' }}
                 className="absolute inset-0 w-full h-full object-fill"
             />
 
-            {/* ホワイトボード (ビデオの上に絶対配置で重ねる) */}
+            {/* ホワイトボード */}
             <WhiteboardSender
-                videoRef={videoRef} // ⭐️ 追加
+                videoRef={videoRef}
                 initialToolLockState={initialSettings.initialToolLockState}
                 onDisconnectCallback={initialSettings.onDisconnectCallback}
                 onUpdateCallback={updateCallback}

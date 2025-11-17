@@ -8,5 +8,8 @@ export default defineConfig({
   base: "/whiteboard-screenshare/",
   build: {
     outDir: '../docs' // ビルド成果物を親ディレクトリの docs に出力
+  },
+  define: {
+    global: 'window',
   }
 })

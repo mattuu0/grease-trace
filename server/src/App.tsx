@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     WhiteboardReceiver,
     WhiteboardObject,
@@ -6,9 +6,9 @@ import {
 } from './whiteboardRecviver'; // WhiteboardReceiverをインポート
 
 // peerをインポート
-import { connectRemote, connectStream, getPeer } from './utils/peer';
+import { getSimplePeerAdapter } from './connect/simple-peer-adapter';
 import { availableMonitors, getCurrentWindow, LogicalPosition, LogicalSize } from '@tauri-apps/api/window';
-import { getCurrent } from '@tauri-apps/plugin-deep-link';;
+// import { getCurrent } from '@tauri-apps/plugin-deep-link';;
 
 // 画面の選択を待っているか
 let waitSelectScreen = false;
@@ -16,8 +16,33 @@ let waitSelectScreen = false;
 // 現在のストリームを保持する変数
 let currentStream: MediaStream | null = null;
 
+// tauri で動かしているか
+const isTauri = true;
+
 // 接続状態の型定義
 type ConnectionStatus = "unconnected" | "connecting" | "connected" | "error" | "confirming";
+
+// マウスのイベントの除外を制御する関数
+function SetInogreMouseEvents(isIgnore: boolean) {
+    // Tauri で動かっていない場合
+    if (!isTauri) {
+        return;
+    }
+
+    // マウスイベントを除外
+    getCurrentWindow().setIgnoreCursorEvents(isIgnore);
+}
+
+// ウィンドウをクローズする関数
+function CloseWindow() {
+    // Tauri で動かっていない場合
+    if (!isTauri) {
+        return;
+    }
+
+    // ウィンドウをクローズ
+    getCurrentWindow().close();
+}
 
 /**
  * "screen:0:0" のような文字列を解析して、モニター番号を取得します。
@@ -26,6 +51,11 @@ type ConnectionStatus = "unconnected" | "connecting" | "connected" | "error" | "
  * @returns モニター番号 (数値)。解析できない場合は null を返します。
  */
 function getMonitorNumber(screenString: string): number | null {
+    // tauri で動かっていない場合
+    if (!isTauri) {
+        return null;
+    }
+
     // 1. 文字列をコロン (":") で分割します。
     // 例: "screen:0:0" -> ["screen", "0", "0"]
     const parts = screenString.split(':');
@@ -67,7 +97,7 @@ async function ShareScreen() {
 
     try {
         // マウスの除外を解除
-        getCurrentWindow().setIgnoreCursorEvents(false);
+        SetInogreMouseEvents(false);
 
         // ストリームを取得
         const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -95,7 +125,7 @@ async function ShareScreen() {
         }
 
         // マウスを除外する
-        getCurrentWindow().setIgnoreCursorEvents(true);
+        SetInogreMouseEvents(true);
 
         // 画面選択待ちを解除
         waitSelectScreen = false;
@@ -114,13 +144,13 @@ async function ShareScreen() {
             // ユーザーがマイクアクセスを許可していない場合
             if (error.name === "NotAllowedError") {
                 // アプリを落とす
-                getCurrentWindow().close();
+                CloseWindow();
                 return null;
             }
         }
 
         // マウスを除外する
-        getCurrentWindow().setIgnoreCursorEvents(true);
+        SetInogreMouseEvents(true);
 
         console.log(error);
 
@@ -134,6 +164,16 @@ async function ShareScreen() {
 // moveToMonitor
 // 指定した番号のモニターに移動する
 async function moveToMonitor(monitorNumber: number) {
+    // tauri で動かっていない場合
+    if (!isTauri) {
+        return;
+    }
+
+    // モニター番号をチェック
+    if (monitorNumber < 0) {
+        return;
+    }
+
     // ウィンドウを取得
     const CurrentWindow = getCurrentWindow();
 
@@ -150,37 +190,7 @@ async function moveToMonitor(monitorNumber: number) {
     CurrentWindow.setPosition(new LogicalPosition(monitor?.position.x!, monitor?.position.y!));
 }
 
-function ShareScreenToRemote(remotePeerId: string) {
-
-    // 画面共有を取得
-    ShareScreen().then((stream) => {
-        if (!stream) {
-            return;
-        }
-
-        // ストリームを送信
-        connectStream(remotePeerId, stream);
-
-        stream.getVideoTracks()[0].addEventListener("ended", () => {
-            // 終了したとき再度要求する
-            ShareScreenToRemote(remotePeerId);
-        });
-
-        // トラックの情報取得
-        const videoTrack = stream.getVideoTracks()[0];
-        const settings = videoTrack.getSettings();
-
-        // モニター番号取得
-        const monitorIndex = getMonitorNumber(settings.deviceId!);
-        // ウィンドウを移動
-        if (monitorIndex) {
-            moveToMonitor(monitorIndex!);
-        }
-    });
-}
-
 export default function App(): React.ReactElement {
-
     const [objects, setObjects] = useState<WhiteboardObject[]>([]);
     const [laserPos, setLaserPos] = useState<Point | null>(null);
     const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("unconnected");
@@ -196,75 +206,77 @@ export default function App(): React.ReactElement {
     // 初期化を検知するフラグ
     const [loading, setLoading] = React.useState(true);
 
-
-    async function Init() {
-        // デスクトップ0番に移動
-        await moveToMonitor(0);
-    }
-
     // Peer IDを使用して接続を開始する関数
     const connectToPeer = (remotePeerId: string | null) => {
         if (!remotePeerId) {
             return;
         }
-        console.log("🎉 Connecting to peer:", remotePeerId);
-        setConnectionStatus("connecting");
 
-        const connection = connectRemote(remotePeerId);
+        // リモートPeerに接続
+        adapter.connectData(remotePeerId);
+    }
 
-        connection.on("open", () => {
-            console.log("🎉 接続成功!");
-            setConnectionStatus("connected");
-            // 接続が成功したらマウスイベントを無視する
-            getCurrentWindow().setIgnoreCursorEvents(true);
-            ShareScreenToRemote(remotePeerId);
-        });
+    // 送られてきたデータをハンドリングする関数
+    function HandlePeerData(data: string) {
+        console.log("🎉 データ受信!");
+        const parsedData = JSON.parse(data);
+        if (parsedData["type"] == "operation") {
+            if (parsedData["op_type"] == "delete") {
+                setObjects((prevObjects) => prevObjects.filter((object) => object.id != parsedData["data"]["id"]));
+            } else if (parsedData["op_type"] == "update") {
+                setObjects((prevObjects) => prevObjects.map((object) => object.id == parsedData["data"]["id"] ? parsedData["data"] : object));
+            } else if (parsedData["op_type"] == "add") {
+                const validObjects = [parsedData.data] as WhiteboardObject[];
+                setObjects((prevObjects) => [...prevObjects, ...validObjects]);
+            } else if (parsedData["op_type"] == "laser_move") {
+                setLaserPos({ x: parsedData["data"]["x"], y: parsedData["data"]["y"] });
+                setLaserAnnotationPoints(parsedData["data"]["annotation"] || []);
+            } else if (parsedData["op_type"] == "laser_click") {
+                setLaserClickPos({ x: parsedData["data"]["x"], y: parsedData["data"]["y"], timestamp: Date.now() });
+            }
+        }
+    };
 
-        connection.on("data", (data: any) => {
-            console.log("🎉 データ受信!");
-            const parsedData = JSON.parse(data);
-            if (parsedData["type"] == "operation") {
-                if (parsedData["op_type"] == "delete") {
-                    setObjects((prevObjects) => prevObjects.filter((object) => object.id != parsedData["data"]["id"]));
-                } else if (parsedData["op_type"] == "update") {
-                    setObjects((prevObjects) => prevObjects.map((object) => object.id == parsedData["data"]["id"] ? parsedData["data"] : object));
-                } else if (parsedData["op_type"] == "add") {
-                    const validObjects = [parsedData.data] as WhiteboardObject[];
-                    setObjects((prevObjects) => [...prevObjects, ...validObjects]);
-                } else if (parsedData["op_type"] == "laser_move") {
-                    setLaserPos({ x: parsedData["data"]["x"], y: parsedData["data"]["y"] });
-                    setLaserAnnotationPoints(parsedData["data"]["annotation"] || []);
-                } else if (parsedData["op_type"] == "laser_click") {
-                    setLaserClickPos({ x: parsedData["data"]["x"], y: parsedData["data"]["y"], timestamp: Date.now() });
-                }
+    function ShareScreenToRemote(remotePeerId: string) {
+        // 画面共有を取得
+        ShareScreen().then((stream) => {
+            if (!stream) {
+                return;
+            }
+
+            // ストリームを送信
+            adapter.sendMediaStream(remotePeerId, stream);1
+
+            stream.getVideoTracks()[0].addEventListener("ended", () => {
+                // 終了したとき再度要求する
+                ShareScreenToRemote(remotePeerId);
+            });
+
+            // トラックの情報取得
+            const videoTrack = stream.getVideoTracks()[0];
+            const settings = videoTrack.getSettings();
+
+            // モニター番号取得
+            const monitorIndex = getMonitorNumber(settings.deviceId!);
+            // ウィンドウを移動
+            if (monitorIndex) {
+                moveToMonitor(monitorIndex!);
             }
         });
+    }
 
-        const stopScreenShare = () => {
-            if (currentStream) {
-                currentStream.getTracks().forEach(track => track.stop());
-                currentStream = null;
-                console.log("🎉 画面共有を停止しました");
-            }
-            // 接続が切れたらマウスイベントを再度有効にする
-            getCurrentWindow().setIgnoreCursorEvents(false);
-            setObjects([]);
-            setLaserPos(null);
-            setLaserAnnotationPoints([]);
-            setLaserClickPos(null);
-        };
-
-        connection.on("error", (err) => {
-            console.error("🎉 接続エラー:", err);
-            setConnectionStatus("error");
-            stopScreenShare();
-        });
-
-        connection.on("close", () => {
-            console.log("🎉 接続がクローズされました");
-            setConnectionStatus("unconnected");
-            stopScreenShare();
-        });
+    const stopScreenShare = () => {
+        if (currentStream) {
+            currentStream.getTracks().forEach(track => track.stop());
+            currentStream = null;
+            console.log("🎉 画面共有を停止しました");
+        }
+        // 接続が切れたらマウスイベントを再度有効にする
+        getCurrentWindow().setIgnoreCursorEvents(false);
+        setObjects([]);
+        setLaserPos(null);
+        setLaserAnnotationPoints([]);
+        setLaserClickPos(null);
     };
 
     // ディープリンクを処理する関数
@@ -285,19 +297,51 @@ export default function App(): React.ReactElement {
         setLoading(false);
 
         console.log("🎉 初期化処理実行!");
-        Init();
 
-        // peerを初期化
-        getPeer();
-
-        // アプリケーション起動時のディープリンクを処理
-        getCurrent().then((urls) => {
-            if (urls && urls.length > 0) {
-                handleDeepLink(urls[0]);
-            }
-        });
     }, [loading]);
 
+    // P2Pアダプター
+    const adapter = useMemo(() => getSimplePeerAdapter(), []);
+
+    // 初期化処理
+    useEffect(() => {
+        let mounted = true;
+
+        const init = async () => {
+            try {
+                // 初期化完了（接続識別子返却）
+                const peerId = await adapter.initialize();
+
+                if (mounted) {
+                    console.log('🎉 Adapter initialized!', peerId);
+                    // setMyPeerId(peerId);
+                }
+
+                adapter.onDataReceived((remotePeerId, data) => {
+                    console.log('📩 Data received from', remotePeerId, ':', data);
+
+                    // メッセージをハンドリング
+                    HandlePeerData(data);
+                });
+
+                adapter.onDisconnected((remotePeerId) => {
+                    console.log('🎉 Peer disconnected:', remotePeerId);
+
+                    console.log("🎉 接続がクローズされました");
+                    setConnectionStatus("unconnected");
+                    stopScreenShare();
+                })
+            } catch (error) {
+                console.log(error);
+            }
+        };
+
+        init();
+
+        return () => {
+            mounted = false;
+        };
+    }, []);
 
     return (
         <div className="relative w-screen h-screen overflow-hidden bg-transparent">
