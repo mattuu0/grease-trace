@@ -4,8 +4,7 @@ on:
   push:
     branches:
       - develop
-  release:
-    types: [published]
+      - main
 
 permissions:
   contents: write
@@ -19,7 +18,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20' # プロジェクトに合わせて適切なバージョンを指定
+          node-version: '20'
 
       - name: Install dependencies (client)
         run: npm install
@@ -32,14 +31,14 @@ jobs:
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./docs # docs ディレクトリをアップロード
+          path: ./docs
 
   build-server:
     needs: build-client
     strategy:
       fail-fast: false
       matrix:
-        platform: [macos-latest, windows-latest] # macOS と Windows のみ
+        platform: [macos-latest, windows-latest]
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -48,6 +47,18 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: Get version from tauri.conf.json
+        id: get_version
+        shell: bash
+        run: |
+          if [ -f "./server/tauri.conf.json" ]; then
+            VERSION=$(node -p "require('./server/tauri.conf.json').version")
+          else
+            VERSION=$(node -p "require('./server/src-tauri/tauri.conf.json').version")
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Detected version: $VERSION"
 
       - name: Install dependencies (server)
         run: npm install
@@ -65,12 +76,74 @@ jobs:
         run: npm run tauri build
         working-directory: ./server
 
-      - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2 # バージョンを v2 に更新
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
         with:
+          name: tauri-build-${{ matrix.platform }}-${{ steps.get_version.outputs.version }}
+          path: |
+            ./server/src-tauri/target/release/bundle/**/*.msi
+            ./server/src-tauri/target/release/bundle/**/*.exe
+            ./server/src-tauri/target/release/bundle/**/*.dmg
+            ./server/src-tauri/target/release/bundle/**/*.app.tar.gz
+          retention-days: 5
+
+  create-release:
+    needs: build-server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Get version from tauri.conf.json
+        id: get_version
+        run: |
+          if [ -f "./server/tauri.conf.json" ]; then
+            VERSION=$(node -p "require('./server/tauri.conf.json').version")
+          else
+            VERSION=$(node -p "require('./server/src-tauri/tauri.conf.json').version")
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Detected version: $VERSION"
+
+      - name: Check if release exists
+        id: check_release
+        run: |
+          TAG="v${{ steps.get_version.outputs.version }}"
+          if git ls-remote --tags origin | grep -q "refs/tags/$TAG"; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Release $TAG already exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Release $TAG does not exist"
+          fi
+
+      - name: Download all artifacts
+        if: steps.check_release.outputs.exists == 'false'
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Display structure of downloaded files
+        if: steps.check_release.outputs.exists == 'false'
+        run: ls -R ./artifacts
+
+      - name: Create Release
+        if: steps.check_release.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: Release v${{ steps.get_version.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
           files: |
-            ./server/src-tauri/target/release/*.msi # Windows
-            ./server/src-tauri/target/release/*.exe # Windows
-            ./server/src-tauri/target/release/*.dmg # macOS
-            ./server/src-tauri/target/release/*.app # macOS
+            ./artifacts/**/*.msi
+            ./artifacts/**/*.exe
+            ./artifacts/**/*.dmg
+            ./artifacts/**/*.app.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
