@@ -17,7 +17,7 @@
         "x": 0,
         "y": 0,
         "decorations": false,
-        "alwaysOnTop": false,
+        "alwaysOnTop": true,
         "closable": false,
         "maximizable": false,
         "minimizable": false,
