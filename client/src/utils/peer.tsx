@@ -17,7 +17,7 @@ export function getPeer() {
             config: {
                 iceServers: [
                     {
-                        url: "turns:mattuu@turn.mattuu.com:5349?transport=tcp",
+                        url: "turns:turn.mattuu.com:5349?transport=tcp",
                         username: "mattuu",
                         credential: "HN9yFGSXQUdzdOHjmKInDSnAMxw3Kv7jDjQopywdYcppRzsxiO3ffQn3dCq5XFtW"
                     }
