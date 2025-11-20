@@ -9,7 +9,21 @@ const connectionMap: Map<string, DataConnection> = new Map<string, DataConnectio
 export function getPeer() {
     // Peerインスタンスを返却
     if (!peer) {
-        peer = new Peer(crypto.randomUUID());
+        peer = new Peer(crypto.randomUUID(),{
+            host: "peerjs.mattuu.com",
+            path: "/",
+            port: 443,
+            secure: true,
+            config: {
+                iceServers: [
+                    {
+                        url: "turns:mattuu@turn.mattuu.com:5349?transport=tcp",
+                        username: "mattuu",
+                        credential: "HN9yFGSXQUdzdOHjmKInDSnAMxw3Kv7jDjQopywdYcppRzsxiO3ffQn3dCq5XFtW"
+                    }
+                ]
+            }
+        });
     }
 
     // Peerインスタンスを返却

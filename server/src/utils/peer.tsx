@@ -12,12 +12,21 @@ export function getPeer() {
     // Peerインスタンスを返却
     if (!peer) {
         // Peerインスタンスを初期化
-        // peer = new Peer(crypto.randomUUID(),{
-        //     host: "peerjs.mattuu.com",
-        //     path: "/",
-        //     port: 443,
-        //     secure: true
-        // });
+        peer = new Peer(crypto.randomUUID(),{
+            host: "peerjs.mattuu.com",
+            path: "/",
+            port: 443,
+            secure: true,
+            config: {
+                iceServers: [
+                    {
+                        url: "turns:mattuu@turn.mattuu.com:5349?transport=tcp",
+                        username: "mattuu",
+                        credential: "HN9yFGSXQUdzdOHjmKInDSnAMxw3Kv7jDjQopywdYcppRzsxiO3ffQn3dCq5XFtW"
+                    }
+                ]
+            }
+        });
         peer = new Peer(crypto.randomUUID());
     }
 
