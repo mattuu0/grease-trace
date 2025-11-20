@@ -291,7 +291,7 @@ export default function App(): React.ReactElement {
         getPeer();
 
         // アプリケーション起動時のディープリンクを処理
-        getCurrent().then((urls) => {
+        getCurrent().then((urls: string[] | null) => {
             if (urls && urls.length > 0) {
                 handleDeepLink(urls[0]);
             }
