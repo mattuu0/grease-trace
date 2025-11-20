@@ -12,21 +12,25 @@ export function getPeer() {
     // Peerインスタンスを返却
     if (!peer) {
         // Peerインスタンスを初期化
-        peer = new Peer(crypto.randomUUID(),{
-            host: "peerjs.mattuu.com",
-            path: "/",
-            port: 443,
-            secure: true,
-            config: {
-                iceServers: [
-                    {
-                        url: "turns:turn.mattuu.com:5349?transport=tcp",
-                        username: "mattuu",
-                        credential: "HN9yFGSXQUdzdOHjmKInDSnAMxw3Kv7jDjQopywdYcppRzsxiO3ffQn3dCq5XFtW"
-                    }
-                ]
-            }
-        });
+        peer = new Peer(crypto.randomUUID(),
+            {
+                "host": "0.peerjs.com",
+                "port": 443,
+                "path": "/",
+                "secure": true,
+                "config": {
+                    "iceServers": [
+                        {
+                            "url": "stun:stun.l.google.com:19302"
+                        },
+                        {
+                            "url": "turns:turn.mattuu.com:5349",
+                            "username": "mattuu",
+                            "credential": "HN9yFGSXQUdzdOHjmKInDSnAMxw3Kv7jDjQopywdYcppRzsxiO3ffQn3dCq5XFtW"
+                        }
+                    ]
+                },
+            });
         peer = new Peer(crypto.randomUUID());
     }
 
@@ -44,7 +48,7 @@ export function destroyPeer() {
 }
 
 // peerに接続
-export function connectRemote(remotePeerId: string) : DataConnection {
+export function connectRemote(remotePeerId: string): DataConnection {
     // Peerインスタンスを取得
     const peer = getPeer();
 
@@ -65,7 +69,7 @@ export function connectRemote(remotePeerId: string) : DataConnection {
 }
 
 // ストリームで接続する関数
-export function connectStream(remotePeerId: string, stream: MediaStream) : MediaConnection {
+export function connectStream(remotePeerId: string, stream: MediaStream): MediaConnection {
     // Peerインスタンスを取得
     const peer = getPeer();
 
