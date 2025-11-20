@@ -83,7 +83,11 @@ export class PeerJSAdapter extends P2PAdapterBase {
         return new Promise((resolve, reject) => {
             // PeerIDを生成
             const id = peerId || crypto.randomUUID();
-            this.peer = new Peer(id);
+            this.peer = new Peer(id,{
+                config: {
+                    iceServers: [{ url: "sturn:mattuu@turn.mattuu.com:5349",credentials:"HN9yFGSXQUdzdOHjmKInDSnAMxw3Kv7jDjQopywdYcppRzsxiO3ffQn3dCq5XFtW"}],
+                }
+            });
 
             // 初期化完了
             this.peer.on('open', (id: string) => {
