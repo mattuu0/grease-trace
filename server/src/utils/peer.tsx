@@ -30,8 +30,8 @@ export function getPeer() {
                         }
                     ]
                 },
+                debug: 3
             });
-        peer = new Peer(crypto.randomUUID());
     }
 
     // Peerインスタンスを返却

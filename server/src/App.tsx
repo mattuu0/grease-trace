@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     WhiteboardReceiver,
     WhiteboardObject,
@@ -196,6 +196,7 @@ export default function App(): React.ReactElement {
     // 初期化を検知するフラグ
     const [loading, setLoading] = React.useState(true);
 
+    const connectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     async function Init() {
         // デスクトップ0番に移動
@@ -210,9 +211,28 @@ export default function App(): React.ReactElement {
         console.log("🎉 Connecting to peer:", remotePeerId);
         setConnectionStatus("connecting");
 
+        // 接続タイムアウトを設定 (10秒)
+        connectionTimeoutRef.current = setTimeout(() => {
+            setConnectionStatus((currentStatus) => {
+                if (currentStatus === "connecting") {
+                    console.error("🎉 接続がタイムアウトしました。");
+                    return "error";
+                }
+                return currentStatus;
+            });
+        }, 10000);
+
+        const clearConnectionTimeout = () => {
+            if (connectionTimeoutRef.current) {
+                clearTimeout(connectionTimeoutRef.current);
+                connectionTimeoutRef.current = null;
+            }
+        };
+
         const connection = connectRemote(remotePeerId);
 
         connection.on("open", () => {
+            clearConnectionTimeout();
             console.log("🎉 接続成功!");
             setConnectionStatus("connected");
             // 接続が成功したらマウスイベントを無視する
@@ -255,12 +275,18 @@ export default function App(): React.ReactElement {
         };
 
         connection.on("error", (err) => {
+            clearConnectionTimeout();
             console.error("🎉 接続エラー:", err);
             setConnectionStatus("error");
             stopScreenShare();
+            // 3秒後に自動的に接続画面に戻る
+            setTimeout(() => {
+                setConnectionStatus("unconnected");
+            }, 3000);
         });
 
         connection.on("close", () => {
+            clearConnectionTimeout();
             console.log("🎉 接続がクローズされました");
             setConnectionStatus("unconnected");
             stopScreenShare();
@@ -288,7 +314,14 @@ export default function App(): React.ReactElement {
         Init();
 
         // peerを初期化
-        getPeer();
+        const peer = getPeer();
+
+        // PeerJSサーバーから切断されたときの処理
+        peer.on('disconnected', () => {
+            console.log('🎉 PeerJSサーバーから切断されました。');
+            setConnectionStatus('unconnected');
+        });
+
 
         // アプリケーション起動時のディープリンクを処理
         getCurrent().then((urls: string[] | null) => {
@@ -365,6 +398,7 @@ export default function App(): React.ReactElement {
                             <div className="text-center">
                                 <p className="text-xl text-gray-700">接続中...</p>
                                 <div className="mt-4 w-16 h-16 mx-auto border-4 border-blue-500 border-solid rounded-full animate-spin border-t-transparent"></div>
+                                <p className="text-gray-600 mt-4">10秒以内に接続できない場合は、<br/>自動的に前の画面に戻ります。</p>
                             </div>
                         )}
 
