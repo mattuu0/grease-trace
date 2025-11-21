@@ -81,38 +81,36 @@ type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
 
 
 /**
- * WhiteboardSenderに渡すPropsの定義 (更新)
+ * WhiteboardSenderに渡すPropsの定義
  */
 export interface WhiteboardSenderProps {
     videoRef: React.RefObject<HTMLVideoElement | null>;
     initialToolLockState?: boolean;
     onDisconnectCallback?: () => void;
-    // ⭐️ 描画データが更新されたときに呼ばれるコールバックを追加
     onUpdateCallback?: (jsonString: string) => void;
 }
 
 
 /**
- * 共通定数定義 (省略)
+ * 共通定数定義
  */
 const BLUE_OUTLINE_WIDTH = 5;
 const BLUE_OUTLINE_COLOR = '#7dd3fc';
 const HANDLE_SIZE = 10;
 
 /**
- * UUID生成ユーティリティ (省略)
+ * UUID生成ユーティリティ
  */
 const generateId = (): string => crypto.randomUUID();
 
 /**
- * 正規化座標 ⇔ 絶対座標の変換ユーティリティ (修正)
+ * 正規化座標 ⇔ 絶対座標の変換ユーティリティ
  */
-// ⭐️ 正規化は XとYで呼び出し元が dimension を使い分ける
 const normalize = (value: number, dimension: number): number => value / dimension;
 const denormalize = (value: number, dimension: number): number => value * dimension;
 
 /**
- * オブジェクトの型定義 (省略)
+ * オブジェクトの型定義
  */
 const OBJECT_TYPES = {
     PEN: 'pen',
@@ -127,7 +125,7 @@ const OBJECT_TYPES = {
 const LINE_WIDTH_OPTIONS = [2, 5, 10, 20];
 
 /**
- * 型ガード (省略)
+ * 型ガード
  */
 const isText = (o: WhiteboardObject): o is TextObject => o.type === OBJECT_TYPES.TEXT;
 const isShape = (o: WhiteboardObject): o is RectangleObject | CircleObject | ImageObject | TextObject =>
@@ -136,30 +134,25 @@ const isResizable = (o: WhiteboardObject): o is RectangleObject | CircleObject |
 
 
 /**
- * ヘルパー関数: オブジェクトの絶対座標での境界ボックスを計算 (修正)
+ * ヘルパー関数: オブジェクトの絶対座標での境界ボックスを計算
  */
 interface AbsoluteBounds { x: number, y: number, width: number, height: number }
 const getShapeBounds = (obj: ShapeObject | TextObject, canvasSize: { width: number; height: number }): AbsoluteBounds => {
-    // ⭐️ アスペクト比の計算を削除
-
+    
     if (obj.type === OBJECT_TYPES.TEXT || obj.type === OBJECT_TYPES.RECTANGLE || obj.type === OBJECT_TYPES.IMAGE) {
         const rectObj = obj as RectangleObject | ImageObject | TextObject;
         return {
             x: denormalize(rectObj.x, canvasSize.width),
-            // ⭐️ Y座標の非正規化を height 基準に戻す
             y: denormalize(rectObj.y, canvasSize.height),
             width: denormalize(rectObj.width, canvasSize.width),
-            // ⭐️ height の非正規化を height 基準に戻す
             height: denormalize(rectObj.height, canvasSize.height)
         };
     }
     if (obj.type === OBJECT_TYPES.CIRCLE) {
         const circleObj = obj as CircleObject;
         const cx = denormalize(circleObj.x, canvasSize.width);
-        // ⭐️ Y座標の非正規化を height 基準に戻す
         const cy = denormalize(circleObj.y, canvasSize.height);
         const rx = denormalize(circleObj.rx, canvasSize.width);
-        // ⭐️ ry の非正規化を height 基準に戻す
         const ry = denormalize(circleObj.ry, canvasSize.height);
         return {
             x: cx - rx,
@@ -172,13 +165,11 @@ const getShapeBounds = (obj: ShapeObject | TextObject, canvasSize: { width: numb
 };
 
 /**
- * ヘルパー関数: ハンドルがクリックされたかチェック (省略)
+ * ヘルパー関数: ハンドルがクリックされたかチェック
  */
 const checkHandleHit = (obj: WhiteboardObject, selectedId: string | null, absX: number, absY: number, canvasSize: { width: number, height: number }): { id: string, handle: ResizeHandle } | null => {
-    // ... (省略) ...
     if (obj.id !== selectedId || !isResizable(obj)) return null;
 
-    // ⭐️ 修正済みの getShapeBounds を使用 (内部ロジックは height 基準に戻っている)
     const bounds = getShapeBounds(obj, canvasSize);
     const { x, y, width, height } = bounds;
 
@@ -204,18 +195,15 @@ const checkHandleHit = (obj: WhiteboardObject, selectedId: string | null, absX: 
 };
 
 /**
- * ヘルパー関数: リサイズ後のオブジェクトの状態を計算 (修正)
+ * ヘルパー関数: リサイズ後のオブジェクトの状態を計算
  */
 const calculateResizedObject = (startObj: WhiteboardObject, dx: number, dy: number, handle: ResizeHandle, canvasSize: { width: number, height: number }): WhiteboardObject | null => {
-    // ... (省略) ...
     if (!isResizable(startObj)) return null;
 
     const startShapeObj = startObj as RectangleObject | CircleObject | ImageObject | TextObject;
     const canvasW = canvasSize.width;
     const canvasH = canvasSize.height;
-    // ⭐️ アスペクト比の計算を削除
 
-    // ⭐️ 修正済みの getShapeBounds を使用 (内部ロジックは height 基準に戻っている)
     const startBounds = getShapeBounds(startShapeObj, canvasSize);
 
     // 現在の絶対座標の境界ボックス (左上X, Y, 幅, 高さ)
@@ -249,28 +237,24 @@ const calculateResizedObject = (startObj: WhiteboardObject, dx: number, dy: numb
     const minH_px = 5;
 
     if (newAbsW < minW_px) {
-        if (handle.includes('w')) { newAbsX = startBounds.x + startBounds.width - minW_px; } // 左側リサイズの場合は右に固定
+        if (handle.includes('w')) { newAbsX = startBounds.x + startBounds.width - minW_px; }
         newAbsW = minW_px;
     }
     if (newAbsH < minH_px) {
-        if (handle.includes('n')) { newAbsY = startBounds.y + startBounds.height - minH_px; } // 上側リサイズの場合は下に固定
+        if (handle.includes('n')) { newAbsY = startBounds.y + startBounds.height - minH_px; }
         newAbsH = minH_px;
     }
 
     // 2. 正規化された新しいプロパティを計算
-    // ⭐️ Y関連の正規化を height 基準に戻す
     const newW = normalize(newAbsW, canvasW);
     const newH = normalize(newAbsH, canvasH);
 
 
     if (startShapeObj.type === OBJECT_TYPES.RECTANGLE || startShapeObj.type === OBJECT_TYPES.IMAGE || startShapeObj.type === OBJECT_TYPES.TEXT) {
-        // ⭐️ Y関連の正規化を height 基準に戻す
         const newX = normalize(newAbsX, canvasW);
         const newY = normalize(newAbsY, canvasH);
 
         if (startShapeObj.type === OBJECT_TYPES.TEXT) {
-            // (fontSize の計算ロジック)
-
             const startW_norm = 'width' in startShapeObj ? startShapeObj.width :0;
             const startH_norm = 'height' in startShapeObj ? startShapeObj.height : 0;
             const ratio = (startW_norm * startH_norm === 0) ? 1 : Math.sqrt((newW * newH) / (startW_norm * startH_norm));
@@ -298,7 +282,6 @@ const calculateResizedObject = (startObj: WhiteboardObject, dx: number, dy: numb
 
     } else if (startShapeObj.type === OBJECT_TYPES.CIRCLE) {
         // 円/楕円
-        // ⭐️ Y関連の正規化を height 基準に戻す
         const newX_center_norm = normalize(newAbsX + newAbsW / 2, canvasW); // 中心X
         const newY_center_norm = normalize(newAbsY + newAbsH / 2, canvasH); // 中心Y
 
@@ -314,7 +297,7 @@ const calculateResizedObject = (startObj: WhiteboardObject, dx: number, dy: numb
     return null;
 }
 
-// RenderObjectコンポーネント (修正)
+// RenderObjectコンポーネント
 interface RenderObjectProps {
     obj: WhiteboardObject;
     canvasSize: { width: number; height: number };
@@ -338,8 +321,6 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize, isSelected
         opacity: 1,
     };
 
-    // ⭐️ アスペクト比の計算を削除
-
     const textRef = useRef<HTMLTextAreaElement>(null);
     const textObject = obj.type === OBJECT_TYPES.TEXT ? (obj as TextObject) : null;
 
@@ -354,7 +335,6 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize, isSelected
 
     if (isSelected && isResizable(obj) && !isEditing) {
         const shapeObj = obj as RectangleObject | CircleObject | ImageObject | TextObject;
-        // ⭐️ 修正済みの getShapeBounds を使用 (内部ロジックは height 基準に戻っている)
         const bounds = getShapeBounds(shapeObj, canvasSize);
         const { x, y, width, height } = bounds;
 
@@ -422,7 +402,6 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize, isSelected
         case OBJECT_TYPES.PEN:
             const penObj = obj as PenObject;
             const polylinePoints = penObj.points.map(p =>
-                // ⭐️ Y座標の非正規化を height 基準に戻す
                 `${denormalize(p.x, canvasSize.width)},${denormalize(p.y, canvasSize.height)}`
             ).join(' ');
 
@@ -456,11 +435,9 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize, isSelected
             if (!textObject) return null;
 
             const textX = denormalize(textObject.x, canvasSize.width);
-            // ⭐️ Y座標の非正規化を height 基準に戻す
             const textY = denormalize(textObject.y, canvasSize.height);
 
             if (isEditing) {
-                // ⭐️ 修正済みの getShapeBounds を使用 (内部ロジックは height 基準に戻っている)
                 const bounds = getShapeBounds(textObject, canvasSize);
                 return (
                     <foreignObject
@@ -522,10 +499,8 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize, isSelected
             const rectObj = obj as RectangleObject;
             const rectProps = {
                 x: denormalize(rectObj.x, canvasSize.width),
-                // ⭐️ Y座標の非正規化を height 基準に戻す
                 y: denormalize(rectObj.y, canvasSize.height),
                 width: denormalize(rectObj.width, canvasSize.width),
-                // ⭐️ height の非正規化を height 基準に戻す
                 height: denormalize(rectObj.height, canvasSize.height),
                 rx: "2"
             };
@@ -547,10 +522,8 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize, isSelected
             const circleObj = obj as CircleObject;
             const circleProps = {
                 cx: denormalize(circleObj.x, canvasSize.width),
-                // ⭐️ Y座標の非正規化を height 基準に戻す
                 cy: denormalize(circleObj.y, canvasSize.height),
                 rx: denormalize(circleObj.rx, canvasSize.width),
-                // ⭐️ ry の非正規化を height 基準に戻す
                 ry: denormalize(circleObj.ry, canvasSize.height),
             };
             return (
@@ -571,10 +544,8 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize, isSelected
             const lineObj = obj as LineObject;
             const lineProps = {
                 x1: denormalize(lineObj.x1, canvasSize.width),
-                // ⭐️ Y座標の非正規化を height 基準に戻す
                 y1: denormalize(lineObj.y1, canvasSize.height),
                 x2: denormalize(lineObj.x2, canvasSize.width),
-                // ⭐️ Y座標の非正規化を height 基準に戻す
                 y2: denormalize(lineObj.y2, canvasSize.height),
             };
             return (
@@ -603,10 +574,8 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize, isSelected
             const imageObj = obj as ImageObject;
             const imageProps = {
                 x: denormalize(imageObj.x, canvasSize.width),
-                // ⭐️ Y座標の非正規化を height 基準に戻す
                 y: denormalize(imageObj.y, canvasSize.height),
                 width: denormalize(imageObj.width, canvasSize.width),
-                // ⭐️ height の非正規化を height 基準に戻す
                 height: denormalize(imageObj.height, canvasSize.height),
                 href: imageObj.src,
             };
@@ -631,10 +600,10 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize, isSelected
  * メインホワイトボードコンポーネント（送信側）
  */
 export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
-    videoRef, // ⭐️ 追加
+    videoRef,
     initialToolLockState = false,
     onDisconnectCallback,
-    onUpdateCallback // ⭐️ 新しいProp
+    onUpdateCallback
 }) => {
     const canvasRef = useRef<SVGSVGElement | null>(null);
     const [objects, setObjects] = useState<WhiteboardObject[]>([]);
@@ -647,8 +616,6 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState<boolean>(false);
     const [canvasSize, setCanvasSize] = useState<{ width: number, height: number }>({ width: 800, height: 600 });
-
-    // ⭐️ アスペクト比の useMemo を削除
 
     const [dragStartObject, setDragStartObject] = useState<WhiteboardObject | null>(null);
 
@@ -680,6 +647,14 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
         }
     };
 
+    // ⭐️ 追加: ビデオのアスペクト比を取得する関数
+    const getAspectRatio = useCallback((): number => {
+        if (videoRef.current && videoRef.current.videoWidth && videoRef.current.videoHeight) {
+            return videoRef.current.videoWidth / videoRef.current.videoHeight;
+        }
+        return 16 / 9; // デフォルト
+    }, [videoRef]);
+
     useEffect(() => {
         const updateSize = () => {
             if (canvasRef.current) {
@@ -703,7 +678,6 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
             setObjects(prev => prev.map(obj => {
                 if (obj.id !== selectedId) return obj;
 
-                // ... (色の変更ロジックは省略) ...
                 if (isText(obj)) {
                     const calculatedNewFontSize = lineWidth * 10;
                     if (obj.color === color && obj.fontSize === calculatedNewFontSize) return obj;
@@ -713,7 +687,6 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
                         color,
                         fontSize: calculatedNewFontSize
                     } as TextObject;
-                    // ⭐️ 更新を即時送信
                     onUpdateCallback?.(emitOperation('update', updatedObj));
                     return updatedObj;
 
@@ -725,7 +698,6 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
                         color,
                         lineWidth
                     } as WhiteboardObject;
-                    // ⭐️ 更新を即時送信
                     onUpdateCallback?.(emitOperation('update', updatedObj));
                     return updatedObj;
                 }
@@ -735,7 +707,7 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
 
 
     /**
-     * Delete/Backspaceキーによる削除処理 (省略)
+     * Delete/Backspaceキーによる削除処理
      */
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -745,7 +717,6 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
                 e.preventDefault();
 
                 setObjects(prev => prev.filter(obj => obj.id !== selectedId));
-                // ⭐️ 削除操作を外部に通知
                 onUpdateCallback?.(emitOperation('delete', { id: selectedId }));
                 setSelectedId(null);
             }
@@ -757,25 +728,23 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
 
 
     /**
-     * JSONストリーム生成 - オペレーション (更新)
+     * JSONストリーム生成 - オペレーション (修正)
      */
     const emitOperation = useCallback((opType: 'add' | 'update' | 'delete' | 'laser_move' | 'laser_click', data: any): string => {
         const operation = {
             type: 'operation',
             op_type: opType,
             timestamp: Date.now(),
+            // ⭐️ 修正: アスペクト比をパケットに含める
+            aspect_ratio: getAspectRatio(),
             data: data
         };
         const jsonString = JSON.stringify(operation);
-
-        // ⭐️ onUpdateCallbackが提供されていれば実行
-        // onUpdateCallback?.(jsonString); // -> onUpdateCallbackを呼び出し元でチェックするように変更
-
         return jsonString;
-    }, []);
+    }, [getAspectRatio]); // 依存配列に追加
 
     /**
-     * 切断ボタンのコールバック関数 (Propsで渡された関数を優先)
+     * 切断ボタンのコールバック関数
      */
     const handleDisconnect = useCallback(() => {
         if (onDisconnectCallback) {
@@ -809,13 +778,10 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
         let offsetY = 0;
 
         // アスペクト比を比較して、ビデオが実際に描画されている領域を計算
-        // (CSSの object-fit: contain と同じ挙動をシミュレート)
         if (containerAspectRatio > videoAspectRatio) {
-            // コンテナがビデオより横長の場合 (上下に余白)
             renderWidth = containerHeight * videoAspectRatio;
             offsetX = (containerWidth - renderWidth) / 2;
         } else {
-            // コンテナがビデオより縦長の場合 (左右に余白)
             renderHeight = containerWidth / videoAspectRatio;
             offsetY = (containerHeight - renderHeight) / 2;
         }
@@ -828,38 +794,29 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
         const relativeX = mouseX - offsetX;
         const relativeY = mouseY - offsetY;
 
-        // 描画領域外のクリックは座標を 0.0-1.0 の範囲に収める（クランプ）
+        // 描画領域外のクリックは座標を 0.0-1.0 の範囲に収める
         const normalizedX = Math.max(0, Math.min(1, relativeX / renderWidth));
         const normalizedY = Math.max(0, Math.min(1, relativeY / renderHeight));
 
-        // 計算結果が不正な場合はnullを返す
         if (isNaN(normalizedX) || isNaN(normalizedY)) return null;
 
         return { x: normalizedX, y: normalizedY };
-    }, [videoRef]); // ⭐️ 依存配列を videoRef に変更
+    }, [videoRef]);
 
     /**
-     * ポイントがオブジェクト内にあるか判定 (修正)
+     * ポイントがオブジェクト内にあるか判定
      */
     const isPointInObject = (obj: WhiteboardObject, x: number, y: number): boolean => {
-        // (x, y は正規化座標)
-
-        // ⭐️ アスペクト比の計算を削除
-        // ⭐️ ピクセル座標に変換 (height 基準)
         const absX = denormalize(x, canvasSize.width);
         const absY = denormalize(y, canvasSize.height);
 
-
         if (isResizable(obj)) {
-            // ⭐️ 修正済みの getShapeBounds を使用 (内部ロジックは height 基準に戻っている)
             const bounds = getShapeBounds(obj, canvasSize);
             return absX >= bounds.x && absX <= bounds.x + bounds.width &&
                 absY >= bounds.y && absY <= bounds.y + bounds.height;
         }
 
-        // Line, Penのロジック
         if (obj.type === OBJECT_TYPES.LINE) {
-            // ⭐️ Y座標の非正規化を height 基準に戻す
             const x1 = denormalize(obj.x1, canvasSize.width);
             const y1 = denormalize(obj.y1, canvasSize.height);
             const x2 = denormalize(obj.x2, canvasSize.width);
@@ -892,7 +849,6 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
 
         if (obj.type === OBJECT_TYPES.PEN) {
             for (let i = 0; i < obj.points.length - 1; i++) {
-                // ⭐️ Y座標の非正規化を height 基準に戻す
                 const x1 = denormalize(obj.points[i].x, canvasSize.width);
                 const y1 = denormalize(obj.points[i].y, canvasSize.height);
                 const x2 = denormalize(obj.points[i + 1].x, canvasSize.width);
@@ -930,7 +886,7 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
 
 
     /**
-     * 描画開始処理 (省略)
+     * 描画開始処理
      */
     const handleMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
         if (editingId) return;
@@ -941,7 +897,7 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
         const absY = clientY - rect.top;
 
         const pos = getNormalizedPosition(e);
-        if (!pos) return; // ⭐️ 追加: 座標が取得できなければ何もしない
+        if (!pos) return;
 
         if (tool === 'select') {
 
@@ -973,7 +929,6 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
                 setDragStartObject(null);
             }
         } else if (tool === 'text') {
-            // ⭐️ Y関連の正規化を height 基準に戻す
             const newObj: TextObject = {
                 id: generateId(),
                 type: OBJECT_TYPES.TEXT,
@@ -984,10 +939,9 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
                 text: "",
                 fontSize: lineWidth * 10,
                 width: normalize(200, canvasSize.width),
-                height: normalize(30, canvasSize.height) // ⭐️ 変更
+                height: normalize(30, canvasSize.height)
             };
             setObjects(prev => [...prev, newObj]);
-            // ⭐️ 新規オブジェクトの追加を外部に通知
             onUpdateCallback?.(emitOperation('add', newObj));
 
             setTimeout(() => {
@@ -1003,7 +957,6 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
             const toDelete = [...objects].reverse().find(obj => isPointInObject(obj, pos.x, pos.y));
             if (toDelete) {
                 setObjects(prev => prev.filter(obj => obj.id !== toDelete.id));
-                // ⭐️ 削除操作を外部に通知
                 onUpdateCallback?.(emitOperation('delete', { id: toDelete.id }));
             }
         } else if (tool === 'laser') {
@@ -1012,7 +965,6 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
             setStartPos(pos);
             setLaserAnnotationPoints([pos]);
 
-            // ⭐️ 修正: レーザークリック操作を外部に通知
             onUpdateCallback?.(emitOperation('laser_click', { x: pos.x, y: pos.y }));
 
         } else {
@@ -1027,7 +979,7 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
     };
 
     /**
-     * ダブルクリック処理 (省略)
+     * ダブルクリック処理
      */
     const handleDoubleClick = (_e: React.MouseEvent<SVGSVGElement>) => {
         if (tool === 'select' && selectedId) {
@@ -1039,13 +991,13 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
     };
 
     /**
-     * 描画中処理 (省略)
+     * 描画中処理
      */
     const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
         if (editingId) return;
 
         const pos = getNormalizedPosition(e);
-        if (!pos) return; // ⭐️ 追加: 座標が取得できなければ何もしない
+        if (!pos) return;
 
         if (canvasRef.current) {
             const rect = canvasRef.current.getBoundingClientRect();
@@ -1059,17 +1011,14 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
             }
 
             if (isDrawing && isLaserAnnotationActive) {
-                // ⭐️ isDrawing時にcurrentPointsではなくlaserAnnotationPointsを更新
                 setLaserAnnotationPoints(prev => [...prev, pos]);
             }
 
             const now = Date.now();
             if (now - lastEmitTimeRef.current > EMIT_INTERVAL) {
-                // ⭐️ 修正: レーザー移動操作を外部に通知 (アノテーション座標を含める)
                 onUpdateCallback?.(emitOperation('laser_move', {
                     x: pos.x,
                     y: pos.y,
-                    // ⭐️ 追加: アノテーションの全座標を送信
                     annotation: isLaserAnnotationActive ? laserAnnotationPoints : []
                 }));
                 lastEmitTimeRef.current = now;
@@ -1078,7 +1027,6 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
         }
 
         if (tool === 'select' && isResizing && selectedId && dragStartObject && resizingHandle) {
-            // ⭐️ dx, dy (ピクセル) の計算を height 基準に戻す
             const dx = denormalize(pos.x - startPos!.x, canvasSize.width);
             const dy = denormalize(pos.y - startPos!.y, canvasSize.height);
 
@@ -1134,7 +1082,7 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
     };
 
     /**
-     * 描画終了処理 (省略)
+     * 描画終了処理
      */
     const handleMouseUp = (e: React.MouseEvent<SVGSVGElement>) => {
         if (editingId) return;
@@ -1142,7 +1090,6 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
         if (tool === 'select' && isResizing && selectedId) {
             const resizedObj = objects.find(obj => obj.id === selectedId);
             if (resizedObj) {
-                // ⭐️ 更新操作を外部に通知
                 onUpdateCallback?.(emitOperation('update', resizedObj));
             }
             setIsResizing(false);
@@ -1156,7 +1103,6 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
         if (tool === 'select' && isDragging && selectedId) {
             const movedObj = objects.find(obj => obj.id === selectedId);
             if (movedObj) {
-                // ⭐️ 更新操作を外部に通知
                 onUpdateCallback?.(emitOperation('update', movedObj));
             }
             setIsDragging(false);
@@ -1164,13 +1110,10 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
             setDragStartObject(null);
         } else if (tool === 'laser' && isDrawing && isLaserAnnotationActive) {
             setIsDrawing(false);
-            // setIsLaserAnnotationActive(false); // 停止時に `laser_move` で空配列を送るため、ここでは維持
             setStartPos(null);
-            // setLaserAnnotationPoints([]); // 停止時に `laser_move` で空配列を送るため、ここでは維持
 
-            // 最後の座標とアノテーションを送信し、その後停止を通知
             const finalPos = getNormalizedPosition(e);
-            if (!finalPos) return; // ⭐️ nullチェックを追加
+            if (!finalPos) return;
 
             onUpdateCallback?.(emitOperation('laser_move', {
                 x: finalPos.x,
@@ -1180,7 +1123,6 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
 
             if (laserTimeoutRef.current) clearTimeout(laserTimeoutRef.current);
             laserTimeoutRef.current = setTimeout(() => {
-                // ⭐️ 修正: レーザー停止操作を外部に通知 (座標を無効化し、アノテーションを空にする)
                 onUpdateCallback?.(emitOperation('laser_move', { x: -1, y: -1, annotation: [] }));
                 setIsLaserAnnotationActive(false);
                 setLaserAnnotationPoints([]);
@@ -1188,7 +1130,7 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
 
         } else if (isDrawing && startPos) {
             const pos = getNormalizedPosition(e);
-            if (!pos) return; // ⭐️ pos が null の場合はここで処理を中断
+            if (!pos) return;
 
             let finalPoints = currentPoints;
             if (tool !== 'pen') {
@@ -1199,7 +1141,6 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
 
             if (newObj) {
                 setObjects(prev => [...prev, newObj]);
-                // ⭐️ 新規オブジェクトの追加を外部に通知
                 onUpdateCallback?.(emitOperation('add', newObj));
 
                 if (!isToolLocked) {
@@ -1216,7 +1157,6 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
         if (tool === 'laser' && !isLaserAnnotationActive) {
             if (laserTimeoutRef.current) clearTimeout(laserTimeoutRef.current);
             laserTimeoutRef.current = setTimeout(() => {
-                // ⭐️ 修正: レーザー停止操作を外部に通知 (座標を無効化し、アノテーションを空にする)
                 onUpdateCallback?.(emitOperation('laser_move', { x: -1, y: -1, annotation: [] }));
             }, 300);
         } else if (tool !== 'laser') {
@@ -1228,7 +1168,7 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
     };
 
     /**
-     * マウスがキャンバスから離れた時の処理 (省略)
+     * マウスがキャンバスから離れた時の処理
      */
     const handleMouseLeave = (e: React.MouseEvent<SVGSVGElement>) => {
         if (editingId) return;
@@ -1240,7 +1180,6 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
         if (tool === 'laser') {
             if (laserTimeoutRef.current) clearTimeout(laserTimeoutRef.current);
             laserTimeoutRef.current = setTimeout(() => {
-                // ⭐️ 修正: レーザー停止操作を外部に通知 (座標を無効化し、アノテーションを空にする)
                 onUpdateCallback?.(emitOperation('laser_move', { x: -1, y: -1, annotation: [] }));
             }, 300);
         }
@@ -1248,7 +1187,7 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
         setMousePos(null);
     };
 
-    // オブジェクト作成 (省略)
+    // オブジェクト作成
     const createObject = (type: Tool, points: Point[], color: string, lineWidth: number): WhiteboardObject | null => {
         if (points.length < 1) return null;
         const start = points[0];
@@ -1326,7 +1265,7 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
         }
     };
 
-    // 画像アップロード処理 (修正)
+    // 画像アップロード処理
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -1338,8 +1277,7 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
                 const imgW = img.width;
                 const imgH = img.height;
                 const canvasW = canvasSize.width;
-                const canvasH = canvasSize.height; // ⭐️ canvasH を使用
-                // ⭐️ アスペクト比の計算を削除
+                const canvasH = canvasSize.height;
 
                 const initialNormalizedWidth = 0.15;
                 const initialPixelWidth = denormalize(initialNormalizedWidth, canvasW);
@@ -1347,7 +1285,6 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
                 const ratio = imgH / imgW;
                 const initialPixelHeight = initialPixelWidth * ratio;
 
-                // ⭐️ Y関連の正規化を height 基準に戻す
                 const initialNormalizedHeight = normalize(initialPixelHeight, canvasH);
                 const initialY_norm = 0.5 - initialNormalizedHeight / 2;
 
@@ -1358,13 +1295,12 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
                     color: '#000000',
                     lineWidth: 0,
                     x: 0.5 - initialNormalizedWidth / 2,
-                    y: initialY_norm, // ⭐️ 変更
+                    y: initialY_norm,
                     width: initialNormalizedWidth,
-                    height: initialNormalizedHeight, // ⭐️ 変更
+                    height: initialNormalizedHeight,
                     src: (event.target?.result as string) || ''
                 };
                 setObjects(prev => [...prev, newObj]);
-                // ⭐️ 新規オブジェクトの追加を外部に通知
                 onUpdateCallback?.(emitOperation('add', newObj));
 
                 if (!isToolLocked) {
@@ -1380,53 +1316,45 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
             e.target.value = '';
         }
     };
-    // 削除処理 (省略)
+    // 削除処理
     const handleDelete = () => {
         if (!selectedId) return;
         setObjects(prev => prev.filter(obj => obj.id !== selectedId));
-        // ⭐️ 削除操作を外部に通知
         onUpdateCallback?.(emitOperation('delete', { id: selectedId }));
         setSelectedId(null);
     };
 
-    // プレビュー図形プロパティ計算 (修正)
+    // プレビュー図形プロパティ計算
     const previewShapeProps = useMemo(() => {
         if (!isDrawing || tool === 'pen' || tool === 'laser' || !startPos || currentPoints.length === 0) return null;
         const endPos = currentPoints[currentPoints.length - 1];
-        // ⭐️ アスペクト比の計算を削除
 
         if (tool === 'rectangle') {
             const x = denormalize(Math.min(startPos.x, endPos.x), canvasSize.width);
-            // ⭐️ Y座標の非正規化を height 基準に戻す
             const y = denormalize(Math.min(startPos.y, endPos.y), canvasSize.height);
             const width = Math.abs(denormalize(endPos.x - startPos.x, canvasSize.width));
-            // ⭐️ height の非正規化を height 基準に戻す
             const height = Math.abs(denormalize(endPos.y - startPos.y, canvasSize.height));
             return { x, y, width, height };
         }
         if (tool === 'circle') {
             const cx = denormalize((startPos.x + endPos.x) / 2, canvasSize.width);
-            // ⭐️ Y座標の非正規化を height 基準に戻す
             const cy = denormalize((startPos.y + endPos.y) / 2, canvasSize.height);
             const rx = Math.abs(denormalize(endPos.x - startPos.x, canvasSize.width)) / 2;
-            // ⭐️ ry の非正規化を height 基準に戻す
             const ry = Math.abs(denormalize(endPos.y - startPos.y, canvasSize.height)) / 2;
             return { cx, cy, rx, ry };
         }
 
         if (tool === 'line') {
             const x1 = denormalize(startPos.x, canvasSize.width);
-            // ⭐️ Y座標の非正規化を height 基準に戻す
             const y1 = denormalize(startPos.y, canvasSize.height);
             const x2 = denormalize(endPos.x, canvasSize.width);
-            // ⭐️ Y座標の非正規化を height 基準に戻す
             const y2 = denormalize(endPos.y, canvasSize.height);
             return { x1, y1, x2, y2 };
         }
         return null;
-    }, [isDrawing, tool, startPos, currentPoints, canvasSize]); // ⭐️ 依存配列から aspectRatio を削除
+    }, [isDrawing, tool, startPos, currentPoints, canvasSize]);
 
-    // カーソルスタイル計算 (省略)
+    // カーソルスタイル計算
     const svgCursorStyle = useMemo(() => {
         if (tool === 'pen' || tool === 'eraser' || tool === 'laser' || tool === 'text') {
             return 'none';
@@ -1442,7 +1370,7 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
         return tool === 'select' ? 'default' : 'crosshair';
     }, [tool, isResizing, resizingHandle]);
 
-    // テキスト編集ロジック (省略)
+    // テキスト編集ロジック
     const handleTextChange = useCallback((id: string, newText: string) => {
         setObjects(prev => prev.map(obj => {
             if (obj.id === id && obj.type === OBJECT_TYPES.TEXT) {
@@ -1456,7 +1384,6 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
         const textObj = objects.find(obj => obj.id === id);
 
         if (textObj) {
-            // ⭐️ テキスト編集完了時の更新を外部に通知
             onUpdateCallback?.(emitOperation('update', textObj));
         }
         setEditingId(null);
@@ -1464,13 +1391,11 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
 
 
     return (
-        // ⭐️ 変更点1: 絶対配置で全画面に広げ、z-indexを10に設定
         <div className="absolute inset-0 z-10 flex flex-col">
 
             {/* ツールバーのオーバーレイ表示 */}
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
                 <div className="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded-xl shadow-lg">
-                    {/* ... (ツールボタン群は省略) ... */}
                     <div className="flex items-center gap-1 p-1 bg-gray-50 rounded-lg">
                         {[
                             { id: 'select' as Tool, icon: MousePointer2, label: '選択' },
@@ -1582,7 +1507,6 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
             <div className="flex-1">
                 <svg
                     ref={canvasRef}
-                    // ⭐️ 変更点2: 背景色、影、ボーダーを全て削除し、透明なキャンバスにする
                     className="w-full h-full"
                     style={{ cursor: svgCursorStyle }}
                     onMouseDown={handleMouseDown}
@@ -1592,7 +1516,7 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
                     onDoubleClick={handleDoubleClick}
                 >
 
-                    {/* 既存オブジェクトの描画 (省略) */}
+                    {/* 既存オブジェクトの描画 */}
                     {objects.map(obj => (
                         <RenderObject
                             key={obj.id}
@@ -1605,11 +1529,10 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
                         />
                     ))}
 
-                    {/* 描画中のプレビュー (省略) */}
+                    {/* 描画中のプレビュー */}
                     {isDrawing && tool !== 'laser' && tool === 'pen' && currentPoints.length > 1 && (
                         <polyline
                             points={currentPoints.map(p =>
-                                // ⭐️ Y座標の非正規化を height 基準に戻す
                                 `${denormalize(p.x, canvasSize.width)},${denormalize(p.y, canvasSize.height)}`
                             ).join(' ')}
                             fill="none"
@@ -1657,11 +1580,10 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
                         />
                     )}
 
-                    {/* レーザーポインターのアノテーション/カーソル (省略) */}
+                    {/* レーザーポインターのアノテーション/カーソル */}
                     {tool === 'laser' && isLaserAnnotationActive && laserAnnotationPoints.length > 1 && (
                         <polyline
                             points={laserAnnotationPoints.map(p =>
-                                // ⭐️ Y座標の非正規化を height 基準に戻す
                                 `${denormalize(p.x, canvasSize.width)},${denormalize(p.y, canvasSize.height)}`
                             ).join(' ')}
                             fill="none"

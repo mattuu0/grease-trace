@@ -187,10 +187,11 @@ export default function App(): React.ReactElement {
     const [manualPeerId, setManualPeerId] = useState("");
     const [pendingPeerId, setPendingPeerId] = useState<string | null>(null);
 
-    // ⭐️ 追加: レーザーアノテーションの座標を保持
     const [laserAnnotationPoints, setLaserAnnotationPoints] = useState<Point[]>([]);
-    // ⭐️ 追加: レーザーがクリックされた位置とタイムスタンプを保持
     const [laserClickPos, setLaserClickPos] = useState<Point & { timestamp: number } | null>(null);
+    
+    // ⭐️ 追加: リモート画面のアスペクト比を管理するState (デフォルト 16:9)
+    const [remoteAspectRatio, setRemoteAspectRatio] = useState<number>(16 / 9);
 
     // 初期化関数
     // 初期化を検知するフラグ
@@ -242,21 +243,31 @@ export default function App(): React.ReactElement {
 
         connection.on("data", (data: any) => {
             console.log("🎉 データ受信!");
-            const parsedData = JSON.parse(data);
-            if (parsedData["type"] == "operation") {
-                if (parsedData["op_type"] == "delete") {
-                    setObjects((prevObjects) => prevObjects.filter((object) => object.id != parsedData["data"]["id"]));
-                } else if (parsedData["op_type"] == "update") {
-                    setObjects((prevObjects) => prevObjects.map((object) => object.id == parsedData["data"]["id"] ? parsedData["data"] : object));
-                } else if (parsedData["op_type"] == "add") {
-                    const validObjects = [parsedData.data] as WhiteboardObject[];
-                    setObjects((prevObjects) => [...prevObjects, ...validObjects]);
-                } else if (parsedData["op_type"] == "laser_move") {
-                    setLaserPos({ x: parsedData["data"]["x"], y: parsedData["data"]["y"] });
-                    setLaserAnnotationPoints(parsedData["data"]["annotation"] || []);
-                } else if (parsedData["op_type"] == "laser_click") {
-                    setLaserClickPos({ x: parsedData["data"]["x"], y: parsedData["data"]["y"], timestamp: Date.now() });
+            try {
+                const parsedData = JSON.parse(data);
+
+                // ⭐️ 追加: アスペクト比が含まれていれば更新
+                if (parsedData.aspect_ratio) {
+                    setRemoteAspectRatio(parsedData.aspect_ratio);
                 }
+
+                if (parsedData["type"] == "operation") {
+                    if (parsedData["op_type"] == "delete") {
+                        setObjects((prevObjects) => prevObjects.filter((object) => object.id != parsedData["data"]["id"]));
+                    } else if (parsedData["op_type"] == "update") {
+                        setObjects((prevObjects) => prevObjects.map((object) => object.id == parsedData["data"]["id"] ? parsedData["data"] : object));
+                    } else if (parsedData["op_type"] == "add") {
+                        const validObjects = [parsedData.data] as WhiteboardObject[];
+                        setObjects((prevObjects) => [...prevObjects, ...validObjects]);
+                    } else if (parsedData["op_type"] == "laser_move") {
+                        setLaserPos({ x: parsedData["data"]["x"], y: parsedData["data"]["y"] });
+                        setLaserAnnotationPoints(parsedData["data"]["annotation"] || []);
+                    } else if (parsedData["op_type"] == "laser_click") {
+                        setLaserClickPos({ x: parsedData["data"]["x"], y: parsedData["data"]["y"], timestamp: Date.now() });
+                    }
+                }
+            } catch (e) {
+                console.error("JSON Parse Error", e);
             }
         });
 
@@ -423,10 +434,10 @@ export default function App(): React.ReactElement {
             <WhiteboardReceiver
                 receivedObjects={objects}
                 laserPointerPos={laserPos}
-                // ⭐️ 追加: レーザーアノテーション座標を渡す
                 laserAnnotationPoints={laserAnnotationPoints}
-                // ⭐️ 追加: レーザークリック位置を渡す
                 laserClickPos={laserClickPos}
+                // ⭐️ 追加: アスペクト比を渡す
+                remoteAspectRatio={remoteAspectRatio}
             />
         </div>
     );

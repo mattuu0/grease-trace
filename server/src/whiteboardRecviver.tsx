@@ -82,14 +82,25 @@ const OBJECT_TYPES = {
     TEXT: 'text'
 } as const;
 
-/**
- * 共通ヘルパー関数
- */
-// ⭐️ 修正: denormalize は XとYで呼び出し元が dimension を使い分ける
-const denormalize = (value: number, dimension: number): number => value * dimension;
+// 描画領域の定義（オフセット計算用）
+interface RenderRect {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
 
-// 型ガード (RenderObjectでのみ使用)
-// const isText = (o: WhiteboardObject): o is TextObject => o.type === OBJECT_TYPES.TEXT;
+/**
+ * 共通ヘルパー関数 (修正)
+ * 正規化された座標(0-1)を、計算された描画領域(RenderRect)に合わせてピクセル座標に変換する
+ */
+const denormalizeX = (value: number, rect: RenderRect): number => {
+    return rect.x + (value * rect.width);
+};
+
+const denormalizeY = (value: number, rect: RenderRect): number => {
+    return rect.y + (value * rect.height);
+};
 
 
 /**
@@ -97,7 +108,7 @@ const denormalize = (value: number, dimension: number): number => value * dimens
  */
 interface RenderObjectProps {
     obj: WhiteboardObject;
-    canvasSize: { width: number; height: number };
+    renderRect: RenderRect; // ⭐️ 変更: canvasSize -> renderRect
     // 受信側では常に false/空関数を渡す
     isSelected: boolean;
     isEditing: boolean;
@@ -105,14 +116,12 @@ interface RenderObjectProps {
     onTextBlur: (id: string) => void;
 }
 
-const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize }) => {
+const RenderObject: React.FC<RenderObjectProps> = ({ obj, renderRect }) => {
     const strokeWidth = obj.lineWidth;
     const commonProps = {
         opacity: 1,
         pointerEvents: "none" // 受信側なのでクリックイベントを無視
     };
-
-    // ⭐️ アスペクト比の計算を削除
 
     // 受信側では編集機能は不要だが、TextObjectの参照は必要
     const textObject = obj.type === OBJECT_TYPES.TEXT ? (obj as TextObject) : null;
@@ -121,8 +130,8 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize }) => {
         case OBJECT_TYPES.PEN:
             const penObj = obj as PenObject;
             const polylinePoints = penObj.points.map(p =>
-                // ⭐️ Y座標の非正規化を height 基準に戻す
-                `${denormalize(p.x, canvasSize.width)},${denormalize(p.y, canvasSize.height)}`
+                // ⭐️ 修正: renderRect を使用して変換
+                `${denormalizeX(p.x, renderRect)},${denormalizeY(p.y, renderRect)}`
             ).join(' ');
 
             return (
@@ -140,9 +149,9 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize }) => {
         case OBJECT_TYPES.TEXT:
             if (!textObject) return null;
 
-            const textX = denormalize(textObject.x, canvasSize.width);
-            // ⭐️ Y座標の非正規化を height 基準に戻す
-            const textY = denormalize(textObject.y, canvasSize.height);
+            // ⭐️ 修正: renderRect を使用して変換
+            const textX = denormalizeX(textObject.x, renderRect);
+            const textY = denormalizeY(textObject.y, renderRect);
 
             // 受信側なので編集モードは表示しない
             const textPreview = textObject.text || 'テキストを入力...';
@@ -163,12 +172,11 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize }) => {
         case OBJECT_TYPES.RECTANGLE:
             const rectObj = obj as RectangleObject;
             const rectProps = {
-                x: denormalize(rectObj.x, canvasSize.width),
-                // ⭐️ Y座標の非正規化を height 基準に戻す
-                y: denormalize(rectObj.y, canvasSize.height),
-                width: denormalize(rectObj.width, canvasSize.width),
-                // ⭐️ height の非正規化を height 基準に戻す
-                height: denormalize(rectObj.height, canvasSize.height),
+                // ⭐️ 修正: 全て renderRect ベースで計算
+                x: denormalizeX(rectObj.x, renderRect),
+                y: denormalizeY(rectObj.y, renderRect),
+                width: rectObj.width * renderRect.width,
+                height: rectObj.height * renderRect.height,
                 rx: "2"
             };
             return (
@@ -184,12 +192,10 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize }) => {
         case OBJECT_TYPES.CIRCLE:
             const circleObj = obj as CircleObject;
             const circleProps = {
-                cx: denormalize(circleObj.x, canvasSize.width),
-                // ⭐️ Y座標の非正規化を height 基準に戻す
-                cy: denormalize(circleObj.y, canvasSize.height),
-                rx: denormalize(circleObj.rx, canvasSize.width),
-                // ⭐️ ry の非正規化を height 基準に戻す
-                ry: denormalize(circleObj.ry, canvasSize.height),
+                cx: denormalizeX(circleObj.x, renderRect),
+                cy: denormalizeY(circleObj.y, renderRect),
+                rx: circleObj.rx * renderRect.width,
+                ry: circleObj.ry * renderRect.height,
             };
             return (
                 <ellipse
@@ -204,12 +210,10 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize }) => {
         case OBJECT_TYPES.LINE:
             const lineObj = obj as LineObject;
             const lineProps = {
-                x1: denormalize(lineObj.x1, canvasSize.width),
-                // ⭐️ Y座標の非正規化を height 基準に戻す
-                y1: denormalize(lineObj.y1, canvasSize.height),
-                x2: denormalize(lineObj.x2, canvasSize.width),
-                // ⭐️ Y座標の非正規化を height 基準に戻す
-                y2: denormalize(lineObj.y2, canvasSize.height),
+                x1: denormalizeX(lineObj.x1, renderRect),
+                y1: denormalizeY(lineObj.y1, renderRect),
+                x2: denormalizeX(lineObj.x2, renderRect),
+                y2: denormalizeY(lineObj.y2, renderRect),
             };
             return (
                 <line
@@ -224,12 +228,10 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize }) => {
         case OBJECT_TYPES.IMAGE:
             const imageObj = obj as ImageObject;
             const imageProps = {
-                x: denormalize(imageObj.x, canvasSize.width),
-                // ⭐️ Y座標の非正規化を height 基準に戻す
-                y: denormalize(imageObj.y, canvasSize.height),
-                width: denormalize(imageObj.width, canvasSize.width),
-                // ⭐️ height の非正規化を height 基準に戻す
-                height: denormalize(imageObj.height, canvasSize.height),
+                x: denormalizeX(imageObj.x, renderRect),
+                y: denormalizeY(imageObj.y, renderRect),
+                width: imageObj.width * renderRect.width,
+                height: imageObj.height * renderRect.height,
                 href: imageObj.src,
             };
             return (
@@ -252,17 +254,18 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize }) => {
 interface WhiteboardReceiverProps {
     receivedObjects: WhiteboardObject[];
     laserPointerPos: Point | null; // 正規化座標
-    // ⭐️ 追加: レーザーアノテーションの座標
     laserAnnotationPoints: Point[];
-    // ⭐️ 追加: レーザークリック位置
     laserClickPos: Point & { timestamp: number } | null;
+    // ⭐️ 追加: リモート画面のアスペクト比を受け取る
+    remoteAspectRatio: number;
 }
 
 export const WhiteboardReceiver: React.FC<WhiteboardReceiverProps> = ({
     receivedObjects,
     laserPointerPos,
-    laserAnnotationPoints, // ⭐️ 受け取り
-    laserClickPos // ⭐️ 受け取り
+    laserAnnotationPoints,
+    laserClickPos,
+    remoteAspectRatio // ⭐️ 追加
 }) => {
     const canvasRef = useRef<SVGSVGElement | null>(null);
     const [canvasSize, setCanvasSize] = useState<{ width: number, height: number }>({ width: 800, height: 600 });
@@ -281,7 +284,7 @@ export const WhiteboardReceiver: React.FC<WhiteboardReceiverProps> = ({
         return () => window.removeEventListener('resize', updateSize);
     }, []);
 
-    // ⭐️ 追加: クリック位置が更新されたらアニメーションをトリガー
+    // クリック位置が更新されたらアニメーションをトリガー
     useEffect(() => {
         if (laserClickPos) {
             // keyを更新することで、SVG要素が再マウントされアニメーションが再トリガーされる
@@ -290,33 +293,63 @@ export const WhiteboardReceiver: React.FC<WhiteboardReceiverProps> = ({
     }, [laserClickPos]);
 
 
-    // ⭐️ absoluteLaserPos の Y座標の計算を height 基準に戻す
+    // ⭐️ 重要: object-fit: contain のロジックで描画領域を計算
+    const renderRect = useMemo((): RenderRect => {
+        const { width: containerW, height: containerH } = canvasSize;
+        const containerRatio = containerW / containerH;
+
+        let renderW = containerW;
+        let renderH = containerH;
+        let offsetX = 0;
+        let offsetY = 0;
+
+        if (containerRatio > remoteAspectRatio) {
+            // コンテナの方が横長（左右に黒帯が入るケース - Pillarbox）
+            renderH = containerH;
+            renderW = containerH * remoteAspectRatio;
+            offsetX = (containerW - renderW) / 2;
+        } else {
+            // コンテナの方が縦長（上下に黒帯が入るケース - Letterbox）
+            renderW = containerW;
+            renderH = containerW / remoteAspectRatio;
+            offsetY = (containerH - renderH) / 2;
+        }
+
+        return {
+            x: offsetX,
+            y: offsetY,
+            width: renderW,
+            height: renderH
+        };
+    }, [canvasSize, remoteAspectRatio]);
+
+
+    // ⭐️ レーザー位置の計算を renderRect ベースに変更
     const absoluteLaserPos = useMemo(() => {
         if (!laserPointerPos || laserPointerPos.x < 0 || laserPointerPos.y < 0) return null;
         return {
-            x: denormalize(laserPointerPos.x, canvasSize.width),
-            // ⭐️ Y座標の非正規化を height 基準に戻す
-            y: denormalize(laserPointerPos.y, canvasSize.height)
+            x: denormalizeX(laserPointerPos.x, renderRect),
+            y: denormalizeY(laserPointerPos.y, renderRect)
         };
-    }, [laserPointerPos, canvasSize]); // ⭐️ 依存配列から aspectRatio を削除
+    }, [laserPointerPos, renderRect]);
 
-    // ⭐️ 追加: absoluteLaserAnnotationPoints (アノテーションのピクセル座標)
+    // ⭐️ レーザーアノテーションの計算を renderRect ベースに変更
     const absoluteLaserAnnotationPoints = useMemo(() => {
         return laserAnnotationPoints.map(p => ({
-            x: denormalize(p.x, canvasSize.width),
-            y: denormalize(p.y, canvasSize.height)
+            x: denormalizeX(p.x, renderRect),
+            y: denormalizeY(p.y, renderRect)
         }));
-    }, [laserAnnotationPoints, canvasSize]);
+    }, [laserAnnotationPoints, renderRect]);
 
-    // ⭐️ 追加: absoluteLaserClickPos (クリックアニメーションのピクセル座標)
+    // ⭐️ クリック位置の計算を renderRect ベースに変更
     const absoluteLaserClickPos = useMemo(() => {
         if (!laserClickPos) return null;
         return {
-            x: denormalize(laserClickPos.x, canvasSize.width),
-            y: denormalize(laserClickPos.y, canvasSize.height),
+            x: denormalizeX(laserClickPos.x, renderRect),
+            y: denormalizeY(laserClickPos.y, renderRect),
             timestamp: laserClickPos.timestamp // タイムスタンプはそのまま保持
         };
-    }, [laserClickPos, canvasSize]);
+    }, [laserClickPos, renderRect]);
 
 
     return (
@@ -328,12 +361,12 @@ export const WhiteboardReceiver: React.FC<WhiteboardReceiverProps> = ({
                     // 背景を透明にするため、背景色やボーダーを削除
                     className="w-full h-full"
                 >
-                    {/* 既存オブジェクトの描画 (アスペクト比対応済み) */}
+                    {/* 既存オブジェクトの描画 */}
                     {receivedObjects.map(obj => (
                         <RenderObject
                             key={obj.id}
                             obj={obj}
-                            canvasSize={canvasSize}
+                            renderRect={renderRect} // ⭐️ renderRectを渡す
                             isSelected={false}
                             isEditing={false}
                             onTextChange={() => { }}
@@ -341,7 +374,7 @@ export const WhiteboardReceiver: React.FC<WhiteboardReceiverProps> = ({
                         />
                     ))}
 
-                    {/* ⭐️ 追加: レーザーポインターのアノテーションの描画 */}
+                    {/* レーザーポインターのアノテーションの描画 */}
                     {absoluteLaserAnnotationPoints.length > 1 && (
                         <polyline
                             points={absoluteLaserAnnotationPoints.map(p => `${p.x},${p.y}`).join(' ')}
@@ -371,7 +404,7 @@ export const WhiteboardReceiver: React.FC<WhiteboardReceiverProps> = ({
                         </circle>
                     )}
 
-                    {/* ⭐️ 追加: クリックアニメーションの描画 */}
+                    {/* クリックアニメーションの描画 */}
                     {absoluteLaserClickPos && (
                         <circle
                             key={clickAnimationKey} // keyの変更でアニメーションを強制的に再実行
