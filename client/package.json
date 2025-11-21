@@ -1,9 +1,9 @@
 {
-  "name": "client",
+  "name": "greasetrace-client",
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "/whiteboard-screenshare/",
+  "homepage": "/grease-trace/",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

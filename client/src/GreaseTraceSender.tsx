@@ -71,7 +71,7 @@ export interface TextObject extends ShapeObject {
     height: number; // テキストの高さ (正規化されていない)
 }
 
-export type WhiteboardObject = PenObject | RectangleObject | CircleObject | LineObject | ImageObject | TextObject;
+export type GreaseTraceObject = PenObject | RectangleObject | CircleObject | LineObject | ImageObject | TextObject;
 
 // ツール名
 type Tool = 'select' | 'rectangle' | 'circle' | 'line' | 'pen' | 'eraser' | 'laser' | 'text';
@@ -81,9 +81,9 @@ type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
 
 
 /**
- * WhiteboardSenderに渡すPropsの定義
+ * GreaseTraceSenderに渡すPropsの定義
  */
-export interface WhiteboardSenderProps {
+export interface GreaseTraceSenderProps {
     videoRef: React.RefObject<HTMLVideoElement | null>;
     initialToolLockState?: boolean;
     onDisconnectCallback?: () => void;
@@ -127,10 +127,10 @@ const LINE_WIDTH_OPTIONS = [2, 5, 10, 20];
 /**
  * 型ガード
  */
-const isText = (o: WhiteboardObject): o is TextObject => o.type === OBJECT_TYPES.TEXT;
-const isShape = (o: WhiteboardObject): o is RectangleObject | CircleObject | ImageObject | TextObject =>
+const isText = (o: GreaseTraceObject): o is TextObject => o.type === OBJECT_TYPES.TEXT;
+const isShape = (o: GreaseTraceObject): o is RectangleObject | CircleObject | ImageObject | TextObject =>
     o.type === OBJECT_TYPES.RECTANGLE || o.type === OBJECT_TYPES.CIRCLE || o.type === OBJECT_TYPES.IMAGE || o.type === OBJECT_TYPES.TEXT;
-const isResizable = (o: WhiteboardObject): o is RectangleObject | CircleObject | ImageObject | TextObject => isShape(o);
+const isResizable = (o: GreaseTraceObject): o is RectangleObject | CircleObject | ImageObject | TextObject => isShape(o);
 
 
 /**
@@ -167,7 +167,7 @@ const getShapeBounds = (obj: ShapeObject | TextObject, canvasSize: { width: numb
 /**
  * ヘルパー関数: ハンドルがクリックされたかチェック
  */
-const checkHandleHit = (obj: WhiteboardObject, selectedId: string | null, absX: number, absY: number, canvasSize: { width: number, height: number }): { id: string, handle: ResizeHandle } | null => {
+const checkHandleHit = (obj: GreaseTraceObject, selectedId: string | null, absX: number, absY: number, canvasSize: { width: number, height: number }): { id: string, handle: ResizeHandle } | null => {
     if (obj.id !== selectedId || !isResizable(obj)) return null;
 
     const bounds = getShapeBounds(obj, canvasSize);
@@ -197,7 +197,7 @@ const checkHandleHit = (obj: WhiteboardObject, selectedId: string | null, absX: 
 /**
  * ヘルパー関数: リサイズ後のオブジェクトの状態を計算
  */
-const calculateResizedObject = (startObj: WhiteboardObject, dx: number, dy: number, handle: ResizeHandle, canvasSize: { width: number, height: number }): WhiteboardObject | null => {
+const calculateResizedObject = (startObj: GreaseTraceObject, dx: number, dy: number, handle: ResizeHandle, canvasSize: { width: number, height: number }): GreaseTraceObject | null => {
     if (!isResizable(startObj)) return null;
 
     const startShapeObj = startObj as RectangleObject | CircleObject | ImageObject | TextObject;
@@ -299,7 +299,7 @@ const calculateResizedObject = (startObj: WhiteboardObject, dx: number, dy: numb
 
 // RenderObjectコンポーネント
 interface RenderObjectProps {
-    obj: WhiteboardObject;
+    obj: GreaseTraceObject;
     canvasSize: { width: number; height: number };
     isSelected: boolean;
     isEditing: boolean;
@@ -599,14 +599,14 @@ const RenderObject: React.FC<RenderObjectProps> = ({ obj, canvasSize, isSelected
 /**
  * メインホワイトボードコンポーネント（送信側）
  */
-export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
+export const GreaseTraceSender: React.FC<GreaseTraceSenderProps> = ({
     videoRef,
     initialToolLockState = false,
     onDisconnectCallback,
     onUpdateCallback
 }) => {
     const canvasRef = useRef<SVGSVGElement | null>(null);
-    const [objects, setObjects] = useState<WhiteboardObject[]>([]);
+    const [objects, setObjects] = useState<GreaseTraceObject[]>([]);
     const [tool, setTool] = useState<Tool>('select');
     const [color, setColor] = useState<string>('#1e293b');
     const [lineWidth, setLineWidth] = useState<number>(LINE_WIDTH_OPTIONS[0]);
@@ -617,7 +617,7 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
     const [isDragging, setIsDragging] = useState<boolean>(false);
     const [canvasSize, setCanvasSize] = useState<{ width: number, height: number }>({ width: 800, height: 600 });
 
-    const [dragStartObject, setDragStartObject] = useState<WhiteboardObject | null>(null);
+    const [dragStartObject, setDragStartObject] = useState<GreaseTraceObject | null>(null);
 
     const [isResizing, setIsResizing] = useState<boolean>(false);
     const [resizingHandle, setResizingHandle] = useState<ResizeHandle | null>(null);
@@ -697,7 +697,7 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
                         ...obj,
                         color,
                         lineWidth
-                    } as WhiteboardObject;
+                    } as GreaseTraceObject;
                     onUpdateCallback?.(emitOperation('update', updatedObj));
                     return updatedObj;
                 }
@@ -806,7 +806,7 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
     /**
      * ポイントがオブジェクト内にあるか判定
      */
-    const isPointInObject = (obj: WhiteboardObject, x: number, y: number): boolean => {
+    const isPointInObject = (obj: GreaseTraceObject, x: number, y: number): boolean => {
         const absX = denormalize(x, canvasSize.width);
         const absY = denormalize(y, canvasSize.height);
 
@@ -1045,7 +1045,7 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
             setObjects(prev => prev.map(obj => {
                 if (obj.id !== selectedId) return obj;
 
-                const startObj = dragStartObject as WhiteboardObject;
+                const startObj = dragStartObject as GreaseTraceObject;
 
                 if (obj.type === OBJECT_TYPES.PEN && startObj.type === OBJECT_TYPES.PEN) {
                     return {
@@ -1188,7 +1188,7 @@ export const WhiteboardSender: React.FC<WhiteboardSenderProps> = ({
     };
 
     // オブジェクト作成
-    const createObject = (type: Tool, points: Point[], color: string, lineWidth: number): WhiteboardObject | null => {
+    const createObject = (type: Tool, points: Point[], color: string, lineWidth: number): GreaseTraceObject | null => {
         if (points.length < 1) return null;
         const start = points[0];
         const end = points[points.length - 1];

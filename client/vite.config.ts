@@ -5,7 +5,7 @@ import tailwindcss from '@tailwindcss/vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(),tailwindcss()],
-  base: "/whiteboard-screenshare/",
+  base: "/grease-trace/",
   build: {
     outDir: '../docs' // ビルド成果物を親ディレクトリの docs に出力
   }

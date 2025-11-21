@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
-import { WhiteboardSender } from './WhiteboardSender'; // WhiteboardSenderをインポート
+import { GreaseTraceSender } from './GreaseTraceSender'; // GreaseTraceSenderをインポート
 import {getPeer,getPeerConnection,setPeerConnection} from "./utils/peer"
 import type { DataConnection, MediaConnection } from 'peerjs';
 
@@ -136,7 +136,7 @@ export default function App(): React.ReactElement {
 
     // 共有が開始されていない場合は待機画面を表示
     if (!isScreenShared) {
-        const url = `whiteboard-app://connect/${myPeerId}`;
+        const url = `greasetrace://connect/${myPeerId}`;
         return (
             <div className="flex flex-col items-center justify-center w-screen h-screen bg-gray-100">
                 <h1 className="text-2xl font-bold mb-4">接続待機中...</h1>
@@ -178,7 +178,7 @@ export default function App(): React.ReactElement {
             />
 
             {/* ホワイトボード (ビデオの上に絶対配置で重ねる) */}
-            <WhiteboardSender
+            <GreaseTraceSender
                 videoRef={videoRef} // ⭐️ 追加
                 initialToolLockState={initialSettings.initialToolLockState}
                 onDisconnectCallback={initialSettings.onDisconnectCallback}
