@@ -38,7 +38,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [macos-latest, windows-latest]
+        # ここから macos-latest を削除しました
+        platform: [windows-latest]
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -80,11 +81,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tauri-build-${{ matrix.platform }}-${{ steps.get_version.outputs.version }}
+          # Mac用のパス (.dmg, .app.tar.gz) を削除しました
           path: |
             ./server/src-tauri/target/release/bundle/**/*.msi
             ./server/src-tauri/target/release/bundle/**/*.exe
-            ./server/src-tauri/target/release/bundle/**/*.dmg
-            ./server/src-tauri/target/release/bundle/**/*.app.tar.gz
           retention-days: 5
 
   create-release:
@@ -140,10 +140,9 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+          # Mac用のファイル指定 (.dmg, .app.tar.gz) を削除しました
           files: |
             ./artifacts/**/*.msi
             ./artifacts/**/*.exe
-            ./artifacts/**/*.dmg
-            ./artifacts/**/*.app.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
