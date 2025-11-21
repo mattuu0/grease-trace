@@ -158,10 +158,16 @@ function ShareScreenToRemote(remotePeerId: string) {
             return;
         }
 
+        // マウスイベント除外を有効化
+        getCurrentWindow().setIgnoreCursorEvents(true);
+        
         // ストリームを送信
         connectStream(remotePeerId, stream);
 
         stream.getVideoTracks()[0].addEventListener("ended", () => {
+            // マウスイベント除外を無効化
+            getCurrentWindow().setIgnoreCursorEvents(false);
+
             // 終了したとき再度要求する
             ShareScreenToRemote(remotePeerId);
         });
@@ -237,7 +243,7 @@ export default function App(): React.ReactElement {
             console.log("🎉 接続成功!");
             setConnectionStatus("connected");
             // 接続が成功したらマウスイベントを無視する
-            getCurrentWindow().setIgnoreCursorEvents(true);
+            getCurrentWindow().setIgnoreCursorEvents(false);
             ShareScreenToRemote(remotePeerId);
         });
 
