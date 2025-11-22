@@ -354,7 +354,7 @@ export default function App(): React.ReactElement {
             {connectionStatus !== "connected" && (
                 <div className="absolute inset-0 z-50 flex items-center justify-center bg-gray-200">
                     <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-lg">
-                        <h1 className="text-3xl font-bold text-center text-gray-800">Whiteboard Screen Share</h1>
+                        <h1 className="text-3xl font-bold text-center text-gray-800">grease-trace</h1>
 
                         {connectionStatus === "unconnected" && (
                             <div className="flex flex-col items-center space-y-4">
