@@ -40,9 +40,24 @@ export default function App(): React.ReactElement {
         const mainPeer = getPeer();
 
         // peerサーバへの接続が完了した際にpeerIDを設定
-        mainPeer.on("open", (id: string) => {
+        mainPeer.on("open", async (id: string) => {
             console.log("🎉 peer open!", id);
-            setMyPeerId(id);
+
+            // APIにリクエスト送信
+            const req = await fetch("https://grease-trace-api.kirimaru.org/api/session/create",{
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    PeerID: id
+                })
+            });
+
+            const res = await req.json();
+            console.log(res["sessionId"]);
+
+            setMyPeerId(res["sessionId"]);
         });
 
         // peer接続

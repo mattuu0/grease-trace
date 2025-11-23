@@ -211,10 +211,28 @@ export default function App(): React.ReactElement {
     }
 
     // Peer IDを使用して接続を開始する関数
-    const connectToPeer = (remotePeerId: string | null) => {
-        if (!remotePeerId) {
+    const connectToPeer = async (apiRemoteID: string | null) => {
+        if (!apiRemoteID) {
             return;
         }
+
+        // APIから取得する
+        const req = await fetch("https://grease-trace-api.kirimaru.org/api/session/validate/" + apiRemoteID, {
+            method: "GET",
+            headers: {
+                "Content-Type": "application/json",
+            }
+        });
+
+        if (req.status !== 200) {
+            console.error("🎉 接続できません。");
+            return;
+        }
+
+        // jsonにして
+        const res = await req.json();
+        const remotePeerId = res.supporterPeerId;
+
         console.log("🎉 Connecting to peer:", remotePeerId);
         setConnectionStatus("connecting");
 
